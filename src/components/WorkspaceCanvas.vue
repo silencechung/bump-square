@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useWorkspaceStore } from '../stores/workspace';
 import type { Square } from '../types';
-import { imageToScreen, screenToImage, type Point } from '../lib/viewport';
 import { useViewport } from '../composables/useViewport';
+import { useNotesRail } from '../composables/useNotesRail';
+import { useFrameInteractions } from '../composables/useFrameInteractions';
 
 const store = useWorkspaceStore();
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -13,149 +14,20 @@ const containerRef = ref<HTMLDivElement | null>(null);
 const { canvasSize, fitted, vp, zoomPct, fit, focusRect, oneToOne, zoomAtCursor } =
   useViewport(store, containerRef);
 
-// Draw mode: user is actively drawing a new square. Preview is tracked in
-// SCREEN space (so it sits under the cursor); committed coords are IMAGE space.
-const drawMode = ref(false);
-const drawing = ref(false);
-const drawStart = ref<Point>({ x: 0, y: 0 });
-const drawCurrent = ref<{ x: number; y: number; width: number; height: number } | null>(null);
-
-// Pan state. Pan can be triggered three ways: the ✋ hand tool (handMode),
-// holding Space, or the middle mouse button.
-const spaceDown = ref(false);
-const handMode = ref(false);
-const panning = ref(false);
-const panLast = ref<Point>({ x: 0, y: 0 });
+// All on-canvas frame interactions (draw / pan / resize / move / copy-cut-paste)
+// + geometry helpers + pointer handlers, extracted to a composable.
+const {
+  drawMode, handMode, spaceDown, placing, clipboard, drawCurrent,
+  RESIZE_HANDLES,
+  screenRect, imgStyle, placeGhost, canvasCursor,
+  startResize, onFrameMouseDown, copySelected, startPlacing, cancelPlacing,
+  toggleDraw, toggleHand,
+  onMouseDown, onMouseMove, onMouseUp, toCanvasCoords,
+} = useFrameInteractions(store, vp, containerRef);
 
 // For label editing
 const editingLabelId = ref<string | null>(null);
 const editingLabelValue = ref('');
-
-// Frame resize. Like drawing, we keep a LOCAL draft rect during the drag (instant,
-// no SSE round-trip per move) and commit once via updateSquare on mouse-up.
-type Rect = { x: number; y: number; width: number; height: number };
-const resizing = ref<{ id: string; handle: string; start: Rect } | null>(null);
-const resizeDraft = ref<({ id: string } & Rect) | null>(null);
-const MIN_FRAME = 4; // min frame size in IMAGE px
-const RESIZE_HANDLES: { h: string; pos: string; cursor: string }[] = [
-  { h: 'nw', pos: 'top:-5px;left:-5px', cursor: 'nwse-resize' },
-  { h: 'n', pos: 'top:-5px;left:50%;transform:translateX(-50%)', cursor: 'ns-resize' },
-  { h: 'ne', pos: 'top:-5px;right:-5px', cursor: 'nesw-resize' },
-  { h: 'e', pos: 'top:50%;right:-5px;transform:translateY(-50%)', cursor: 'ew-resize' },
-  { h: 'se', pos: 'bottom:-5px;right:-5px', cursor: 'nwse-resize' },
-  { h: 's', pos: 'bottom:-5px;left:50%;transform:translateX(-50%)', cursor: 'ns-resize' },
-  { h: 'sw', pos: 'bottom:-5px;left:-5px', cursor: 'nesw-resize' },
-  { h: 'w', pos: 'top:50%;left:-5px;transform:translateY(-50%)', cursor: 'ew-resize' },
-];
-
-// Recompute a frame's rect from the handle being dragged: the OPPOSITE edge(s)
-// stay anchored, the dragged edge(s) follow the mouse (in image space).
-function computeResizeRect(s: Rect, handle: string, m: Point): Rect {
-  const right = s.x + s.width;
-  const bottom = s.y + s.height;
-  let { x, y } = s;
-  let w = s.width;
-  let h = s.height;
-  if (handle.includes('w')) { x = Math.min(m.x, right - MIN_FRAME); w = right - x; }
-  if (handle.includes('e')) { w = Math.max(m.x - s.x, MIN_FRAME); }
-  if (handle.includes('n')) { y = Math.min(m.y, bottom - MIN_FRAME); h = bottom - y; }
-  if (handle.includes('s')) { h = Math.max(m.y - s.y, MIN_FRAME); }
-  return { x, y, width: w, height: h };
-}
-
-function startResize(sq: Square, handle: string, e: MouseEvent) {
-  e.stopPropagation();
-  store.selectedSquareId = sq.id;
-  store.selectedAssetId = null;
-  const start = { x: sq.x, y: sq.y, width: sq.width, height: sq.height };
-  resizing.value = { id: sq.id, handle, start };
-  resizeDraft.value = { id: sq.id, ...start };
-}
-
-// --- Drag-to-move (a frame + its contained frames move together) ---
-const moving = ref<null | {
-  id: string;
-  origin: Record<string, { x: number; y: number }>;
-  start: Point;
-  dx: number;
-  dy: number;
-  moved: boolean;
-}>(null);
-
-// Frames geometrically inside `src` (client mirror of the server's containment).
-function framesInsideClient(src: Square): Square[] {
-  return store.squares.filter(
-    b =>
-      b.id !== src.id &&
-      b.x >= src.x && b.y >= src.y &&
-      b.x + b.width <= src.x + src.width &&
-      b.y + b.height <= src.y + src.height,
-  );
-}
-
-function onFrameMouseDown(sq: Square, e: MouseEvent) {
-  // In place mode, a click drops the pasted group — handle that first.
-  if (placing.value) { dropPlacement(e); return; }
-  // Pan modes take precedence even when the press starts on a frame.
-  if (e.button === 1 || (e.button === 0 && (spaceDown.value || handMode.value))) {
-    e.preventDefault();
-    startPan(e);
-    return;
-  }
-  if (drawMode.value || e.button !== 0) return;
-  store.selectedSquareId = sq.id;
-  store.selectedAssetId = null;
-  const group = [sq, ...framesInsideClient(sq)];
-  const origin: Record<string, { x: number; y: number }> = {};
-  for (const g of group) origin[g.id] = { x: g.x, y: g.y };
-  moving.value = { id: sq.id, origin, start: screenToImage(toCanvasCoords(e), vp.value), dx: 0, dy: 0, moved: false };
-}
-
-// --- Copy / cut / paste (click-to-place) ---
-const clipboard = ref<null | { sourceId: string; cut: boolean }>(null);
-const placing = ref(false);
-const placeCursor = ref<Point | null>(null); // image coords under the cursor
-
-function copySelected(cut: boolean) {
-  if (!store.selectedSquareId) return;
-  clipboard.value = { sourceId: store.selectedSquareId, cut };
-}
-
-function startPlacing() {
-  if (!clipboard.value) return;
-  if (!store.squares.some(s => s.id === clipboard.value!.sourceId)) { clipboard.value = null; return; }
-  drawMode.value = false;
-  handMode.value = false;
-  placing.value = true;
-  placeCursor.value = null;
-}
-
-async function dropPlacement(e: MouseEvent) {
-  const cb = clipboard.value;
-  placing.value = false;
-  if (!cb) return;
-  const pt = screenToImage(toCanvasCoords(e), vp.value);
-  await store.pasteFrame(cb.sourceId, pt.x, pt.y, cb.cut);
-  if (cb.cut) clipboard.value = null; // a cut is consumed once placed
-}
-
-// Ghost preview rects for the group being placed, following the cursor.
-const placeGhost = computed(() => {
-  if (!placing.value || !clipboard.value || !placeCursor.value) return [];
-  const src = store.squares.find(s => s.id === clipboard.value!.sourceId);
-  if (!src) return [];
-  const group = [src, ...framesInsideClient(src)];
-  const dx = placeCursor.value.x - src.x;
-  const dy = placeCursor.value.y - src.y;
-  return group.map(g => {
-    const tl = imageToScreen({ x: g.x + dx, y: g.y + dy }, vp.value);
-    return {
-      left: tl.x + 'px', top: tl.y + 'px',
-      width: g.width * vp.value.scale + 'px',
-      height: g.height * vp.value.scale + 'px',
-    };
-  });
-});
 
 // Focus loop: zoom into a single frame to confirm its exact bounds.
 function focusSquare(sq: Square) {
@@ -178,7 +50,7 @@ function onKeyDown(e: KeyboardEvent) {
   // Escape always wins, even from inside an input: blur the field, drop the
   // selection, and pop back to the overview. "Esc = leave, back to overview."
   if (e.code === 'Escape') {
-    if (placing.value) { placing.value = false; return; } // cancel a pending paste first
+    if (placing.value) { cancelPlacing(); return; } // cancel a pending paste first
     (document.activeElement as HTMLElement | null)?.blur();
     store.selectedSquareId = null;
     handMode.value = false;
@@ -211,151 +83,9 @@ function isTyping(e: KeyboardEvent) {
   return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 }
 
-// Auto-fit when a new image arrives.
-watch(() => store.sourceImage?.url, url => {
-  fitted.value = false;
-  if (url) fit();
-});
-
 watch(() => store.step, step => {
   if (step === 'layout') drawMode.value = false;
 });
-
-function toCanvasCoords(e: MouseEvent): Point {
-  const rect = containerRef.value!.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-}
-
-// --- Frame geometry: image-space rect -> screen-space CSS box ---
-// During a resize drag the draft rect wins, so the frame follows the cursor
-// instantly (the committed value arrives later via SSE).
-// Stack frames by area: SMALLER frames sit on top so an inner/contained frame
-// stays clickable even when a larger frame fully overlaps it. (Clicking the
-// large frame's uncovered area still selects it.) Largest → z 1 … smallest → z n.
-const zById = computed<Record<string, number>>(() => {
-  const sorted = [...store.squares].sort(
-    (a, b) => b.width * b.height - a.width * a.height,
-  );
-  const m: Record<string, number> = {};
-  sorted.forEach((s, i) => { m[s.id] = i + 1; });
-  return m;
-});
-
-function screenRect(sq: Square) {
-  let r: Rect = sq;
-  if (resizeDraft.value && resizeDraft.value.id === sq.id) {
-    r = resizeDraft.value;
-  } else if (moving.value && moving.value.origin[sq.id]) {
-    const o = moving.value.origin[sq.id];
-    r = { x: o.x + moving.value.dx, y: o.y + moving.value.dy, width: sq.width, height: sq.height };
-  }
-  const tl = imageToScreen({ x: r.x, y: r.y }, vp.value);
-  return {
-    left: tl.x + 'px',
-    top: tl.y + 'px',
-    width: r.width * vp.value.scale + 'px',
-    height: r.height * vp.value.scale + 'px',
-    zIndex: String(zById.value[sq.id] ?? 1),
-  };
-}
-
-const imgStyle = computed(() => {
-  const img = store.sourceImage;
-  if (!img) return {};
-  const tl = imageToScreen({ x: 0, y: 0 }, vp.value);
-  return {
-    left: tl.x + 'px',
-    top: tl.y + 'px',
-    width: img.width * vp.value.scale + 'px',
-    height: img.height * vp.value.scale + 'px',
-  };
-});
-
-// --- Pointer handling ---
-function startPan(e: MouseEvent) {
-  panning.value = true;
-  panLast.value = { x: e.clientX, y: e.clientY };
-}
-
-function onMouseDown(e: MouseEvent) {
-  // In place mode, a click on the empty canvas drops the pasted group.
-  if (placing.value && e.button === 0) { dropPlacement(e); return; }
-  // Middle button, space+drag, or the ✋ hand tool = pan, regardless of mode.
-  if (e.button === 1 || (e.button === 0 && (spaceDown.value || handMode.value))) {
-    e.preventDefault();
-    startPan(e);
-    return;
-  }
-  if (drawMode.value && e.button === 0) {
-    drawing.value = true;
-    const pos = toCanvasCoords(e);
-    drawStart.value = pos;
-    drawCurrent.value = { x: pos.x, y: pos.y, width: 0, height: 0 };
-  }
-}
-
-function onMouseMove(e: MouseEvent) {
-  if (placing.value) {
-    placeCursor.value = screenToImage(toCanvasCoords(e), vp.value);
-    return;
-  }
-  if (moving.value) {
-    const m = screenToImage(toCanvasCoords(e), vp.value);
-    moving.value.dx = m.x - moving.value.start.x;
-    moving.value.dy = m.y - moving.value.start.y;
-    if (Math.abs(moving.value.dx) * vp.value.scale > 3 || Math.abs(moving.value.dy) * vp.value.scale > 3) {
-      moving.value.moved = true;
-    }
-    return;
-  }
-  if (resizing.value) {
-    const m = screenToImage(toCanvasCoords(e), vp.value);
-    resizeDraft.value = { id: resizing.value.id, ...computeResizeRect(resizing.value.start, resizing.value.handle, m) };
-    return;
-  }
-  if (panning.value) {
-    const dx = e.clientX - panLast.value.x;
-    const dy = e.clientY - panLast.value.y;
-    panLast.value = { x: e.clientX, y: e.clientY };
-    store.setViewport({ ...vp.value, tx: vp.value.tx + dx, ty: vp.value.ty + dy });
-    return;
-  }
-  if (!drawing.value || !drawCurrent.value) return;
-  const pos = toCanvasCoords(e);
-  drawCurrent.value = {
-    x: Math.min(pos.x, drawStart.value.x),
-    y: Math.min(pos.y, drawStart.value.y),
-    width: Math.abs(pos.x - drawStart.value.x),
-    height: Math.abs(pos.y - drawStart.value.y),
-  };
-}
-
-function onMouseUp() {
-  if (moving.value) {
-    const mv = moving.value;
-    moving.value = null;
-    if (mv.moved) store.moveFrameGroup(mv.id, mv.dx, mv.dy);
-    return;
-  }
-  if (resizing.value && resizeDraft.value) {
-    const d = resizeDraft.value;
-    store.updateSquare(d.id, { x: d.x, y: d.y, width: d.width, height: d.height });
-    resizing.value = null;
-    resizeDraft.value = null;
-    return;
-  }
-  if (panning.value) { panning.value = false; return; }
-  if (!drawing.value || !drawCurrent.value) return;
-  drawing.value = false;
-  const r = drawCurrent.value;
-  // Require a meaningful drag (screen px), then convert to image space.
-  if (r.width > 12 && r.height > 12) {
-    const tl = screenToImage({ x: r.x, y: r.y }, vp.value);
-    const br = screenToImage({ x: r.x + r.width, y: r.y + r.height }, vp.value);
-    store.addSquare(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
-  }
-  drawCurrent.value = null;
-}
 
 function onWheel(e: WheelEvent) {
   e.preventDefault();
@@ -450,141 +180,21 @@ function dismissAiNote(sq: Square) {
   store.updateSquare(sq.id, { aiNote: '' });
 }
 
-// --- Notes rail + leader line (XMind-style: annotations live off to the side) ---
-// The rail is in SCREEN space, so it stays constant size no matter the zoom.
-// Hovering a rail row draws a leader line back to that frame's CURRENT on-screen
-// position — recomputed from the live viewport, so the line tracks the frame as
-// you zoom and pan.
+// Notes rail + leader lines + floating labels (XMind-style annotations off to
+// the side, in screen space so they track zoom/pan) extracted to a composable.
 const bodyRef = ref<HTMLDivElement | null>(null);
-const hoveredFrameId = ref<string | null>(null);
-const railAnchor = ref<Point | null>(null);
-
-function hoverRow(id: string, e: MouseEvent) {
-  hoveredFrameId.value = id;
-  const body = bodyRef.value;
-  if (!body) return;
-  const b = body.getBoundingClientRect();
-  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  // Left-middle of the hovered row, expressed in body-local coordinates so it
-  // shares a coordinate space with the canvas's screen-space frame positions.
-  railAnchor.value = { x: r.left - b.left, y: r.top - b.top + r.height / 2 };
-}
-
-// Open a frame from the rail. Unlike clicking a frame on the canvas, this does
-// NOT toggle — a rail click should always open the row, never close it. Esc or
-// an empty-canvas click still deselects.
-function focusRow(sq: Square) {
-  store.selectedSquareId = sq.id;
-  store.selectedAssetId = null;
-}
-
-const leaderLine = computed(() => {
-  const id = hoveredFrameId.value;
-  if (!id || !railAnchor.value) return null;
-  const sq = store.squares.find(s => s.id === id);
-  if (!sq) return null;
-  // Frame anchor = right-middle of the frame in screen space. Because it's
-  // derived from the live viewport, zooming/panning moves this endpoint live.
-  const p = imageToScreen({ x: sq.x + sq.width, y: sq.y + sq.height / 2 }, vp.value);
-  return { x1: p.x, y1: p.y, x2: railAnchor.value.x, y2: railAnchor.value.y };
-});
-
-// Selection leader line: whenever a frame is SELECTED, draw a dashed connector
-// from the frame to its Notes-rail row (its edit area), so it's obvious where to
-// type the intent. Unlike the hover line this persists while the frame stays
-// selected. The rail-row anchor is measured from the DOM after render (the row's
-// y depends on the rail's scroll/layout); the frame endpoint recomputes live
-// from the viewport, so the line tracks zoom/pan.
-const selectedRailAnchor = ref<Point | null>(null);
-async function measureSelectedRow() {
-  await nextTick();
-  const id = store.selectedSquareId;
-  const body = bodyRef.value;
-  if (!id || !notesOpen.value || !body) {
-    selectedRailAnchor.value = null;
-    return;
-  }
-  const row = body.querySelector(`[data-rail-id="${id}"]`) as HTMLElement | null;
-  if (!row) {
-    selectedRailAnchor.value = null;
-    return;
-  }
-  const b = body.getBoundingClientRect();
-  const r = row.getBoundingClientRect();
-  selectedRailAnchor.value = { x: r.left - b.left, y: r.top - b.top + r.height / 2 };
-}
-watch(() => [store.selectedSquareId, notesOpen.value, store.squares.length], measureSelectedRow);
-
-const selectedLeaderLine = computed(() => {
-  const id = store.selectedSquareId;
-  if (!id || !selectedRailAnchor.value) {
-    return null;
-  }
-  const sq = store.squares.find(s => s.id === id);
-  if (!sq) {
-    return null;
-  }
-  const p = imageToScreen({ x: sq.x + sq.width, y: sq.y + sq.height / 2 }, vp.value);
-  return { x1: p.x, y1: p.y, x2: selectedRailAnchor.value.x, y2: selectedRailAnchor.value.y };
-});
-
-// Floating-label placement. Each frame's label wants to sit just above its
-// top-left corner; when two would overlap (coincident / nested frames on a
-// small image), we nudge the later one upward until it clears. Returns screen-
-// space positions, so it all re-flows live as you zoom and pan.
-const TAG_H = 22; // approx tag height + gap, in px
-interface TagSlot { sq: Square; tagX: number; tagY: number; cornerX: number; cornerY: number }
-const labelLayout = computed<TagSlot[]>(() => {
-  const placed: TagSlot[] = [];
-  for (const sq of store.squares) {
-    const tl = imageToScreen({ x: sq.x, y: sq.y }, vp.value);
-    let tagX = tl.x;
-    let tagY = tl.y - TAG_H - 4; // default: just above the corner
-    // Climb upward while we'd collide with an already-placed nearby tag.
-    let guard = 0;
-    while (
-      guard++ < 30 &&
-      placed.some(p => Math.abs(p.tagX - tagX) < 130 && Math.abs(p.tagY - tagY) < TAG_H)
-    ) {
-      tagY -= TAG_H;
-    }
-    placed.push({ sq, tagX, tagY, cornerX: tl.x, cornerY: tl.y });
-  }
-  return placed;
-});
-
-// Which labels actually render. By default only the SELECTED frame's label shows
-// (clicking a frame reveals its name) — the notes rail already gives a hover
-// leader line, so always-on labels just clutter and overlap the image. The 🏷
-// toolbar toggle (showLabels) overrides this to surface ALL labels at once.
-const visibleLabels = computed<TagSlot[]>(() =>
-  showLabels.value
-    ? labelLayout.value
-    : labelLayout.value.filter(L => L.sq.id === store.selectedSquareId),
-);
-
-const canvasCursor = computed(() => {
-  if (placing.value) return 'copy';
-  if (panning.value) return 'grabbing';
-  if (handMode.value || spaceDown.value) return 'grab';
-  return drawMode.value ? 'crosshair' : 'default';
-});
-
-// Floating XMind labels overlay the image. Default: only the SELECTED frame's
-// label shows (click to reveal). The toolbar toggle flips this to "show all".
-const showLabels = ref(false);
-// Notes rail is collapsible to give the canvas more room on small screens.
-const notesOpen = ref(true);
-
-// Draw and Hand are mutually exclusive tools — turning one on releases the other.
-function toggleDraw() {
-  drawMode.value = !drawMode.value;
-  if (drawMode.value) handMode.value = false;
-}
-function toggleHand() {
-  handMode.value = !handMode.value;
-  if (handMode.value) drawMode.value = false;
-}
+const {
+  notesOpen,
+  showLabels,
+  hoveredFrameId,
+  hoverRow,
+  focusRow,
+  leaderLine,
+  measureSelectedRow,
+  selectedLeaderLine,
+  labelLayout,
+  visibleLabels,
+} = useNotesRail(store, bodyRef, vp);
 </script>
 
 <template>

@@ -23,18 +23,22 @@ bump-square 是設計稿與「真正寫程式的 agent」之間的**意圖確認
 - `src/lib/saveStore.ts` — 具名存檔 `.bump-square/saves/<id>.json`（只存 board，不含 agent log）。
 - `src/lib/containment.ts` — 幾何包含關係（結構樹的依據）。
 - `src/stores/workspace.ts` — Pinia store，瀏覽器端的唯讀鏡像 + dispatch。
-- 即時「門鈴」走 **fakechat channel**：UI 發請求 → `ringFakechat()` POST 到 fakechat → 以 `<channel source="fakechat">` 進到 live session。
+- `src/composables/` — WorkspaceCanvas 的邏輯拆成三個 composable（元件本身只剩 wiring + template）：
+  - `useViewport.ts` — zoom／pan／fit／focus／1:1（座標數學在 `lib/viewport.ts`，這裡是 reactive glue：container size、auto-fit、wheel zoom）。
+  - `useFrameInteractions.ts` — 畫框／pan／resize（8 handle）／拖移群組／copy-cut-paste，含幾何 helper（`screenRect`／`imgStyle`／z-stacking／ghost preview）與統一 pointer handlers。
+  - `useNotesRail.ts` — Notes rail 的 leader line（hover + 選取兩種）、浮動 label 排版、`notesOpen`／`showLabels`。
+- 即時「門鈴」走 **fakechat channel**：UI 發請求 → `ringFakechat()` POST 到 fakechat → 以 `<channel source="fakechat">` 進到 live session。（舊的 `mcp/ws_watch.py` SSE polling watcher 已移除，被 channel 取代。）
 
 `.bump-square/` 整個 gitignore。
 
 ## Tech stack
 
-- **Astro 6**（`output: 'server'`，Node standalone adapter）+ **Vue 3** islands（`<script setup lang="ts">`）+ **Pinia** + **Tailwind CSS v4**（`@tailwindcss/vite`）。
-- **Vite**、**pnpm**、Node ≥ 22（實際跑 24）。
+- **Astro 6**（`output: 'server'`，Node standalone adapter）+ **Vue 3** islands（`<script setup lang="ts">`）+ **Pinia** + **UnoCSS**（`presetWind4`，對齊原本的 Tailwind v4／oklch 色票與 v4 reset；`@unocss/astro` integration + `uno.config.ts`）。
+- **Vite**、**pnpm**、Node ≥ 22（實際跑 24）。**TypeScript** + `@types/node` 已裝（先前缺，WebStorm 把 `node:fs` 等 import 全標紅）；`pnpm exec tsc --noEmit` 可型別檢查。
 - `@modelcontextprotocol/sdk`（MCP）、`zod`、`uuid`、`sharp`、`konva` / `vue-konva`、`markdown-it`（Structure 的 Prompt 預覽渲染，`html:false` 防 XSS）。
 - Dev server **port 固定 4399**（`astro.config.mjs`）；`.mcp.json` 的 `BUMP_SQUARE_URL` 也指這裡。
 
-Tailwind v4 注意事項：preflight 不會重置 `<button>` 背景（會是 UA 灰），需在 `@layer base` 修；Astro `<style>` 是 scoped，全域樣式要 `is:global`。
+UnoCSS 注意事項：用 `presetWind4({ preflights: { reset: true } })` 還原原本 Tailwind v4 的樣子（oklch 色票 + 內建 v4 reset，含全域 `border:0 solid` 讓 `border-2`/`border-4` 這類「只設寬度」的 utility 看得到框）。**改用 `presetWind3` 會踩雷：v3 不設全域 `border-style`，所有 `border-N` 變透明 → 框線全部消失。** 自訂 reset／`<button>` 背景／`.no-scrollbar` 放在 `uno.config.ts` 的 `preflights`；共用樣式用 `shortcuts`（`btn` / `btn-primary` / `btn-neutral` / `icon-btn`）。Astro `<style>` 是 scoped，全域樣式要 `is:global`。**pnpm 坑**：`unocss/astro` 內部 re-export `@unocss/astro`，pnpm 巢狀下從專案根解不到 → 直接 `pnpm add -D @unocss/astro` 並 import `@unocss/astro`。
 
 ## Permissions / 啟動與權限
 
@@ -55,8 +59,9 @@ Tailwind v4 注意事項：preflight 不會重置 `<button>` 背景（會是 UA 
   - **Ctrl+C/X/V 點擊放置**：複製/剪下選中框 → Ctrl+V 進入放置模式（幽靈預覽跟游標、點擊落點、Esc 取消）。
   - **Undo/Redo**：工具列 ↶↷ + Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y（全 board 操作，agent log 不進 history）。
   - 框依**面積排 z-index**（小框在上，可點進內層）。
-  - Notes rail：單擊改名、✏/⧉/✕；浮動標籤可切換顯示。
+  - Notes rail：單擊改名、✏/⧉/✕；浮動標籤可切換顯示。**選中 Frame 會畫一條虛線 leader line 指到它在 Notes rail 的編輯列**（提示去哪寫意圖；隨 zoom/pan/scroll 即時跟動）。
   - `🧩 產生意圖結構` → 發 `generate-structure` 請求給 agent。
+  - **Reset（header）** 兩段式確認：第一下變紅「確定清空？」，3 秒內再按一次才真的清空。
 - **Structure (StructureView)** — 兩個 tab：
   - **Tree**：可收合的結構樹（圓形 +/− toggle、連接線）。
   - **Prompt**：markdown 渲染（**預覽/原始碼** toggle 可編輯）；內容＝`## 結構`（code-fence 樹狀）+ `## 節點說明`（清單）+ 選配 `## Assets 生成 prompt`。
