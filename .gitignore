@@ -30,3 +30,6 @@ pnpm-debug.log*
 .bsq-shot.png
 .bsq-clip.png
 .claude/scheduled_tasks.lock
+
+# remember/handoff session history
+.remember/
