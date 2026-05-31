@@ -1,0 +1,27 @@
+---
+import AppShell from '../components/AppShell.vue';
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bump-square</title>
+    <style is:global>
+      @import "tailwindcss";
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; height: 100%; }
+      /* Buttons default to the UA light-gray background here (preflight doesn't
+         reset it in this setup). Reset in @layer base so it beats the UA default
+         but still LOSES to utility bg-* classes (which live in @layer utilities);
+         an unlayered rule would wrongly override every button background. */
+      @layer base {
+        button { background-color: transparent; cursor: pointer; }
+        button:disabled { cursor: default; }
+      }
+    </style>
+  </head>
+  <body class="bg-zinc-950">
+    <AppShell client:load />
+  </body>
+</html>
