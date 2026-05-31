@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import vue from '@astrojs/vue';
-import tailwindcss from '@tailwindcss/vite';
+import UnoCSS from '@unocss/astro';
 
 import node from '@astrojs/node';
 
@@ -11,14 +11,13 @@ export default defineConfig({
   server: { port: 4399 },
 
   integrations: [
+    // Picks up uno.config.ts and injects the generated stylesheet into pages and
+    // Vue islands. Replaces the previous @tailwindcss/vite plugin.
+    UnoCSS(),
     vue({
       appEntrypoint: '/src/app.ts',
     }),
   ],
-
-  vite: {
-    plugins: [tailwindcss()],
-  },
 
   adapter: node({
     mode: 'standalone',

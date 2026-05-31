@@ -22,14 +22,14 @@ function fmt(ts: number) {
   <aside class="w-72 shrink-0 bg-zinc-800 border-l border-zinc-700/60 flex flex-col overflow-hidden">
     <div class="p-3 border-b border-zinc-700/60 flex items-center gap-2">
       <button
-        class="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
+        class="w-8 h-8 icon-btn hover:text-zinc-100 text-xl leading-none"
         title="Collapse agent panel"
         @click="$emit('collapse')"
       >›</button>
       <h2 class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">🤖 Agent</h2>
       <button
         v-if="store.agentNotes.length"
-        class="ml-auto w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 hover:bg-zinc-700 transition-colors"
+        class="ml-auto w-8 h-8 icon-btn hover:text-red-400"
         title="Clear all agent messages"
         @click="store.clearAgentNotes()"
       >🗑</button>

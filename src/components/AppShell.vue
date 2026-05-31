@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '../stores/workspace';
 import UploadPanel from './UploadPanel.vue';
 import WorkspaceCanvas from './WorkspaceCanvas.vue';
 import AgentPanel from './AgentPanel.vue';
+import AgentPanelToggle from './AgentPanelToggle.vue';
 import StructureView from './StructureView.vue';
 import SavesMenu from './SavesMenu.vue';
 
@@ -28,6 +29,26 @@ const hasStructure = computed(() => !!store.structure.tree);
 
 // Right-side agent panel is collapsible to give the canvas more room.
 const agentOpen = ref(true);
+
+// Reset is destructive (wipes the whole board), so it's a two-click confirm:
+// first click arms it ("確定清空？"), second within 3s actually resets. Auto-
+// disarms so a stray first click can't leave it primed indefinitely.
+const confirmingReset = ref(false);
+let resetTimer: ReturnType<typeof setTimeout> | null = null;
+function onResetClick() {
+  if (confirmingReset.value) {
+    if (resetTimer) {
+      clearTimeout(resetTimer);
+    }
+    confirmingReset.value = false;
+    store.reset();
+    return;
+  }
+  confirmingReset.value = true;
+  resetTimer = setTimeout(() => {
+    confirmingReset.value = false;
+  }, 3000);
+}
 
 function canVisit(s: string): boolean {
   if (s === 'upload') return true;
@@ -59,7 +80,14 @@ function canVisit(s: string): boolean {
           @click="store.step = 'structure'"
         >✓ structure ready →</span>
         <SavesMenu />
-        <button class="text-xs text-zinc-500 hover:text-red-400" @click="store.reset()">reset</button>
+        <button
+          class="text-xs px-3 py-1 rounded-full font-medium transition-colors"
+          :class="confirmingReset
+            ? 'bg-red-500 text-white hover:bg-red-400'
+            : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-red-400'"
+          :title="confirmingReset ? '再按一次確認清空整個板面' : '清空整個板面'"
+          @click="onResetClick"
+        >{{ confirmingReset ? '確定清空？' : 'Reset' }}</button>
       </div>
     </header>
 
@@ -71,29 +99,13 @@ function canVisit(s: string): boolean {
     >
       <WorkspaceCanvas />
       <AgentPanel v-if="agentOpen" @collapse="agentOpen = false" />
-      <button
-        v-else
-        class="w-8 shrink-0 border-l border-zinc-700/60 bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors flex flex-col items-center justify-center gap-2"
-        title="Show agent panel"
-        @click="agentOpen = true"
-      >
-        <span class="text-sm">‹</span>
-        <span class="text-xs uppercase tracking-wider [writing-mode:vertical-rl]">🤖 Agent</span>
-      </button>
+      <AgentPanelToggle v-else @expand="agentOpen = true" />
     </div>
 
     <div v-else-if="store.step === 'structure'" class="flex-1 flex overflow-hidden">
       <StructureView />
       <AgentPanel v-if="agentOpen" @collapse="agentOpen = false" />
-      <button
-        v-else
-        class="w-8 shrink-0 border-l border-zinc-700/60 bg-zinc-800 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors flex flex-col items-center justify-center gap-2"
-        title="Show agent panel"
-        @click="agentOpen = true"
-      >
-        <span class="text-sm">‹</span>
-        <span class="text-xs uppercase tracking-wider [writing-mode:vertical-rl]">🤖 Agent</span>
-      </button>
+      <AgentPanelToggle v-else @expand="agentOpen = true" />
     </div>
   </div>
 </template>

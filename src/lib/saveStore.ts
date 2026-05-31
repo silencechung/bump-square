@@ -78,7 +78,10 @@ export function createSave(name: string, state: WorkspaceState): SaveMeta {
     structure: state.structure,
   };
   const record: SaveRecord = { ...meta, state: structuredClone(board) };
+  // meta.id is a fresh uuid so fileFor never rejects it, but narrow the type
+  // (fileFor returns string | null for the path-traversal guard) before use.
   const target = fileFor(meta.id);
+  if (!target) throw new Error('createSave: generated id failed validation');
   const tmp = `${target}.tmp`;
   writeFileSync(tmp, JSON.stringify(record), 'utf8');
   renameSync(tmp, target);

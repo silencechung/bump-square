@@ -42,7 +42,7 @@ function fmt(ts: number) {
 <template>
   <div ref="root" class="relative">
     <button
-      class="text-xs px-3 py-1 rounded-full bg-zinc-700 text-zinc-200 hover:bg-zinc-600 transition-colors"
+      class="text-xs px-3 py-1 btn-neutral"
       title="存檔 / 載入元件設定"
       @click="toggle"
     >💾 存檔</button>
@@ -61,7 +61,7 @@ function fmt(ts: number) {
           @keydown.enter="save"
         />
         <button
-          class="text-sm px-3 py-1.5 rounded-full font-medium bg-violet-400 text-violet-950 hover:bg-violet-300 disabled:opacity-40 disabled:cursor-default transition-colors"
+          class="text-sm px-3 py-1.5 btn-primary"
           :disabled="!name.trim()"
           @click="save"
         >儲存</button>
@@ -87,7 +87,7 @@ function fmt(ts: number) {
               @click="load(s.id)"
             >載入</button>
             <button
-              class="w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-zinc-400 hover:text-red-400 hover:bg-zinc-700 transition-colors"
+              class="w-7 h-7 shrink-0 icon-btn hover:text-red-400"
               title="刪除此存檔"
               @click.stop="store.removeSave(s.id)"
             >✕</button>

@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useWorkspaceStore } from '../stores/workspace';
 import type { Square } from '../types';
-import { imageToScreen, screenToImage, fitToView, focusRect, zoomAt, type Point } from '../lib/viewport';
+import { imageToScreen, screenToImage, type Point } from '../lib/viewport';
+import { useViewport } from '../composables/useViewport';
 
 const store = useWorkspaceStore();
 const containerRef = ref<HTMLDivElement | null>(null);
-const canvasSize = ref({ width: 800, height: 600 });
+
+// Viewport (zoom/pan/fit/focus) extracted into a composable; the component just
+// wires its handlers to pointer events.
+const { canvasSize, fitted, vp, zoomPct, fit, focusRect, oneToOne, zoomAtCursor } =
+  useViewport(store, containerRef);
 
 // Draw mode: user is actively drawing a new square. Preview is tracked in
 // SCREEN space (so it sits under the cursor); committed coords are IMAGE space.
@@ -21,9 +26,6 @@ const spaceDown = ref(false);
 const handMode = ref(false);
 const panning = ref(false);
 const panLast = ref<Point>({ x: 0, y: 0 });
-
-// Has the viewport been auto-fitted to the current image yet?
-const fitted = ref(false);
 
 // For label editing
 const editingLabelId = ref<string | null>(null);
@@ -155,50 +157,14 @@ const placeGhost = computed(() => {
   });
 });
 
-const vp = computed(() => store.viewport);
-
-function fit() {
-  const img = store.sourceImage;
-  if (!img) return;
-  store.setViewport(
-    fitToView(img.width, img.height, canvasSize.value.width, canvasSize.value.height),
-  );
-  fitted.value = true;
-}
-
 // Focus loop: zoom into a single frame to confirm its exact bounds.
 function focusSquare(sq: Square) {
   store.selectedSquareId = sq.id;
   store.selectedAssetId = null;
-  store.setViewport(
-    focusRect(
-      { x: sq.x, y: sq.y, width: sq.width, height: sq.height },
-      canvasSize.value.width,
-      canvasSize.value.height,
-    ),
-  );
-}
-
-function oneToOne() {
-  const img = store.sourceImage;
-  if (!img) return;
-  // 1:1 pixels, centered.
-  store.setViewport({
-    scale: 1,
-    tx: (canvasSize.value.width - img.width) / 2,
-    ty: (canvasSize.value.height - img.height) / 2,
-  });
+  focusRect({ x: sq.x, y: sq.y, width: sq.width, height: sq.height });
 }
 
 onMounted(() => {
-  if (containerRef.value) {
-    const ro = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      canvasSize.value = { width, height };
-      if (store.sourceImage && !fitted.value) fit();
-    });
-    ro.observe(containerRef.value);
-  }
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
 });
@@ -393,9 +359,7 @@ function onMouseUp() {
 
 function onWheel(e: WheelEvent) {
   e.preventDefault();
-  const cursor = toCanvasCoords(e);
-  const factor = Math.exp(-e.deltaY * 0.0015); // smooth, trackpad-friendly
-  store.setViewport(zoomAt(vp.value, cursor, factor));
+  zoomAtCursor(toCanvasCoords(e), e.deltaY);
 }
 
 function onSquareDragOver(e: DragEvent, squareId: string) {
@@ -525,6 +489,45 @@ const leaderLine = computed(() => {
   return { x1: p.x, y1: p.y, x2: railAnchor.value.x, y2: railAnchor.value.y };
 });
 
+// Selection leader line: whenever a frame is SELECTED, draw a dashed connector
+// from the frame to its Notes-rail row (its edit area), so it's obvious where to
+// type the intent. Unlike the hover line this persists while the frame stays
+// selected. The rail-row anchor is measured from the DOM after render (the row's
+// y depends on the rail's scroll/layout); the frame endpoint recomputes live
+// from the viewport, so the line tracks zoom/pan.
+const selectedRailAnchor = ref<Point | null>(null);
+async function measureSelectedRow() {
+  await nextTick();
+  const id = store.selectedSquareId;
+  const body = bodyRef.value;
+  if (!id || !notesOpen.value || !body) {
+    selectedRailAnchor.value = null;
+    return;
+  }
+  const row = body.querySelector(`[data-rail-id="${id}"]`) as HTMLElement | null;
+  if (!row) {
+    selectedRailAnchor.value = null;
+    return;
+  }
+  const b = body.getBoundingClientRect();
+  const r = row.getBoundingClientRect();
+  selectedRailAnchor.value = { x: r.left - b.left, y: r.top - b.top + r.height / 2 };
+}
+watch(() => [store.selectedSquareId, notesOpen.value, store.squares.length], measureSelectedRow);
+
+const selectedLeaderLine = computed(() => {
+  const id = store.selectedSquareId;
+  if (!id || !selectedRailAnchor.value) {
+    return null;
+  }
+  const sq = store.squares.find(s => s.id === id);
+  if (!sq) {
+    return null;
+  }
+  const p = imageToScreen({ x: sq.x + sq.width, y: sq.y + sq.height / 2 }, vp.value);
+  return { x1: p.x, y1: p.y, x2: selectedRailAnchor.value.x, y2: selectedRailAnchor.value.y };
+});
+
 // Floating-label placement. Each frame's label wants to sit just above its
 // top-left corner; when two would overlap (coincident / nested frames on a
 // small image), we nudge the later one upward until it clears. Returns screen-
@@ -560,7 +563,6 @@ const visibleLabels = computed<TagSlot[]>(() =>
     : labelLayout.value.filter(L => L.sq.id === store.selectedSquareId),
 );
 
-const zoomPct = computed(() => Math.round(vp.value.scale * 100));
 const canvasCursor = computed(() => {
   if (placing.value) return 'copy';
   if (panning.value) return 'grabbing';
@@ -805,10 +807,10 @@ function toggleHand() {
     <!-- Notes rail: every frame's label + intent comment, parked off to the
          side so it never overlaps dense or nested frames. Screen space → it
          stays the same size at any zoom. -->
-    <aside v-if="notesOpen" class="w-64 shrink-0 h-full border-l border-zinc-700/60 bg-[#2c2c33] overflow-y-auto overflow-x-hidden no-scrollbar">
+    <aside v-if="notesOpen" class="w-64 shrink-0 h-full border-l border-zinc-700/60 bg-[#2c2c33] overflow-y-auto overflow-x-hidden no-scrollbar" @scroll="measureSelectedRow">
       <div class="px-3 py-2.5 flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-300 border-b border-zinc-700/60 sticky top-0 bg-[#2c2c33]/95 backdrop-blur z-10">
         <button
-          class="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors normal-case"
+          class="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors normal-case text-xl leading-none"
           title="Collapse notes rail"
           @click="notesOpen = false"
         >›</button>
@@ -822,6 +824,7 @@ function toggleHand() {
       <div
         v-for="sq in store.squares"
         :key="sq.id"
+        :data-rail-id="sq.id"
         class="px-3 py-2 border-b border-zinc-700/40 cursor-pointer transition-colors"
         :class="store.selectedSquareId === sq.id ? 'bg-zinc-700/70' : 'hover:bg-zinc-700/40'"
         @mouseenter="hoverRow(sq.id, $event)"
@@ -936,7 +939,7 @@ function toggleHand() {
       title="Show notes rail"
       @click="notesOpen = true"
     >
-      <span class="text-sm">‹</span>
+      <span class="text-xl leading-none">‹</span>
       <span class="text-xs uppercase tracking-wider [writing-mode:vertical-rl]">📝 Notes</span>
     </button>
 
@@ -952,6 +955,18 @@ function toggleHand() {
         :stroke="store.selectedSquareId === L.sq.id || hoveredFrameId === L.sq.id ? '#a78bfa' : '#52525b'"
         stroke-width="1"
       />
+      <!-- selection leader line: from the SELECTED frame to its notes edit row,
+           persists while selected so it's clear where to write the intent. -->
+      <template v-if="selectedLeaderLine">
+        <line
+          :x1="selectedLeaderLine.x1" :y1="selectedLeaderLine.y1"
+          :x2="selectedLeaderLine.x2" :y2="selectedLeaderLine.y2"
+          stroke="#c4b5fd" stroke-width="1.5" stroke-dasharray="5 4"
+        />
+        <circle :cx="selectedLeaderLine.x1" :cy="selectedLeaderLine.y1" r="3.5" fill="#c4b5fd" />
+        <circle :cx="selectedLeaderLine.x2" :cy="selectedLeaderLine.y2" r="3.5" fill="#c4b5fd" />
+      </template>
+
       <!-- rail leader line (hovering a notes-rail row) -->
       <line
         v-if="leaderLine"

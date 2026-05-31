@@ -58,7 +58,7 @@ function copyHandoff() {
       <div class="flex items-center gap-2">
         <!-- Stage 3 — hand the confirmed spec off to the dev agent. -->
         <button
-          class="text-sm px-5 py-1.5 rounded-full font-medium transition-colors disabled:opacity-40 disabled:cursor-default"
+          class="text-sm px-5 py-1.5 btn font-medium"
           :class="store.isRequestPending('handoff')
             ? 'bg-amber-300 text-amber-950 hover:bg-amber-200'
             : 'bg-violet-400 text-violet-950 hover:bg-violet-300'"
@@ -92,7 +92,7 @@ function copyHandoff() {
           <span v-if="isEdited" class="text-sm text-amber-400">✏ 已編輯</span>
           <button
             v-if="isEdited"
-            class="text-sm px-4 py-1.5 rounded-full bg-zinc-700 text-zinc-200 hover:bg-zinc-600 transition-colors"
+            class="text-sm px-4 py-1.5 btn-neutral"
             title="Discard edits, revert to the structure-derived prompt"
             @click="resetPrompt"
           >重設</button>
@@ -117,7 +117,7 @@ function copyHandoff() {
             </span>
           </button>
           <button
-            class="text-sm px-4 py-1.5 rounded-full bg-zinc-700 text-zinc-200 hover:bg-zinc-600 transition-colors"
+            class="text-sm px-4 py-1.5 btn-neutral"
             title="Copy the handoff prompt"
             @click="copyHandoff"
           >Copy</button>
@@ -154,7 +154,7 @@ function copyHandoff() {
         ></textarea>
         <div class="flex items-center gap-2 shrink-0">
           <button
-            class="text-sm px-4 py-1.5 rounded-full font-medium transition-colors disabled:opacity-40 disabled:cursor-default"
+            class="text-sm px-4 py-1.5 btn font-medium"
             :class="assetsPending
               ? 'bg-amber-300 text-amber-950 hover:bg-amber-200'
               : 'bg-cyan-400 text-cyan-950 hover:bg-cyan-300'"

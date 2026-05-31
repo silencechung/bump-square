@@ -29,3 +29,4 @@ pnpm-debug.log*
 # transient CDP screenshot artifacts
 .bsq-shot.png
 .bsq-clip.png
+.claude/scheduled_tasks.lock
