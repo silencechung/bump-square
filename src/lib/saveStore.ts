@@ -35,7 +35,12 @@ interface SaveRecord extends SaveMeta {
   state: BoardState;
 }
 
-function fileFor(id: string): string {
+// Save ids are uuids; reject anything else so a crafted id can't escape
+// SAVES_DIR via path traversal (loadSave reads / deleteSave unlinks by id).
+const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function fileFor(id: string): string | null {
+  if (!ID_RE.test(id)) return null;
   return resolve(SAVES_DIR, `${id}.json`);
 }
 
@@ -84,7 +89,7 @@ export function createSave(name: string, state: WorkspaceState): SaveMeta {
 export function loadSave(id: string): BoardState | null {
   try {
     const f = fileFor(id);
-    if (!existsSync(f)) return null;
+    if (!f || !existsSync(f)) return null;
     const rec = JSON.parse(readFileSync(f, 'utf8')) as SaveRecord;
     return rec.state ?? null;
   } catch {
@@ -96,7 +101,7 @@ export function loadSave(id: string): BoardState | null {
 export function deleteSave(id: string): void {
   try {
     const f = fileFor(id);
-    if (existsSync(f)) unlinkSync(f);
+    if (f && existsSync(f)) unlinkSync(f);
   } catch {
     /* ignore */
   }

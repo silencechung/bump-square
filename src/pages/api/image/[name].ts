@@ -12,11 +12,16 @@ export const GET: APIRoute = ({ params }) => {
   const bytes = readImageBytes(name);
   if (!bytes) return new Response('Not found', { status: 404 });
 
-  const mediaType = getState().sourceImage?.mediaType ?? 'application/octet-stream';
+  // Serve only known raster types; never echo an attacker-influenced type that
+  // could make the browser render HTML/SVG. nosniff blocks MIME-sniffing too.
+  const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+  const stored = getState().sourceImage?.mediaType;
+  const mediaType = stored && ALLOWED.has(stored) ? stored : 'application/octet-stream';
 
   return new Response(new Uint8Array(bytes), {
     headers: {
       'Content-Type': mediaType,
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   });

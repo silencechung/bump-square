@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { v4 as uuid } from 'uuid';
 import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, addAgentRequest, resolveAgentRequest, clearAgentNotes } from '../../lib/serverState';
 import { listSaves, createSave, loadSave, deleteSave } from '../../lib/saveStore';
+import { crossOriginBlocked } from '../../lib/guard';
 import type { Square } from '../../types';
 
 export const prerender = false;
@@ -10,6 +11,8 @@ export const prerender = false;
  * then broadcast to all SSE subscribers (browser tabs AND reflected to Claude). */
 export const POST: APIRoute = async ({ request }) => {
   try {
+    if (crossOriginBlocked(request)) return json({ error: 'cross-origin blocked' }, 403);
+
     const { action, payload } = await request.json() as { action: string; payload: Record<string, unknown> };
 
     switch (action) {
