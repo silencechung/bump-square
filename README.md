@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.png" width="88" alt="bump-square logo">
+</p>
+
 # bump-square
 
 > 設計稿與「真正寫程式的 agent」之間的**意圖確認層 (intent layer)**。
