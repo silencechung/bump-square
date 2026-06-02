@@ -17,10 +17,11 @@ bump-square 的職責**終點就是這份意圖 spec**——下游 agent / devel
 
 ## 流程
 
-```
-upload  →  layout  →  structure  →  handoff
-截圖       畫 Frame    意圖結構樹     markdown spec
-           + 寫意圖     (agent 產生)   送交開發 agent
+```mermaid
+flowchart LR
+    A["Upload\n截圖"] --> B["Layout\n畫 Frame + 寫意圖"]
+    B --> C["Structure\n意圖結構樹\nagent 產生"]
+    C --> D["Handoff\nmarkdown spec\n送交開發 agent"]
 ```
 
 1. **Upload** — 上傳設計截圖。
@@ -68,6 +69,27 @@ claude --channels plugin:fakechat@claude-plugins-official
 - fakechat 服務 :8787 必須在跑（一次 `/mcp` reconnect 會把它拉起來）。
 - MCP server 由專案的 `.mcp.json` 在你開啟此專案時自動 spawn。
 
+#### Doorbell 時序圖
+
+```mermaid
+sequenceDiagram
+    participant UI as 瀏覽器 UI
+    participant FC as fakechat :8787
+    participant Ch as Claude Channel
+    participant Agent as Claude Agent
+    participant Srv as server :4399
+
+    UI->>FC: ringFakechat() POST (kind, request_id)
+    FC->>Ch: channel source="fakechat"
+    Ch->>Agent: 門鈴事件
+    Agent->>Srv: get_board_state (MCP)
+    Srv-->>Agent: board state
+    Agent->>Srv: set_structure / set_assets_prompt (MCP)
+    Agent->>Srv: resolve_request(id) (MCP)
+    Agent->>FC: reply
+    FC-->>UI: 回應顯示
+```
+
 裝好 skill 後，在任何目錄輸入 `/bump-square` 即可帶起環境並 health-check 各 port。
 
 ## 架構
@@ -84,6 +106,35 @@ claude --channels plugin:fakechat@claude-plugins-official
 | `src/lib/containment.ts` | 幾何包含關係（結構樹的依據） |
 | `src/stores/workspace.ts` | Pinia store，瀏覽器端唯讀鏡像 + dispatch |
 | `.claude/skills/bump-square/` | Claude Code skill：環境帶起 + health-check |
+
+### 資料流
+
+```mermaid
+flowchart TB
+    Browser["瀏覽器\nVue 3 + Pinia"]
+    Agent["Claude Agent\nlive session"]
+
+    subgraph Server ["bump-square server :4399"]
+        SS[("serverState\nsingle source of truth")]
+        EventsAPI["/api/events SSE"]
+        StateAPI["/api/state mutation"]
+        McpAPI["/api/mcp tools"]
+    end
+
+    McpBridge["mcp/server.ts\nstdio MCP bridge"]
+    Persist[(".bump-square/workspace.json")]
+
+    Browser -- "action + payload" --> StateAPI
+    StateAPI --> SS
+    SS --> EventsAPI
+    EventsAPI -- "SSE 推送狀態" --> Browser
+
+    Agent -- "MCP 工具呼叫" --> McpBridge
+    McpBridge -- "HTTP POST" --> McpAPI
+    McpAPI --> SS
+
+    SS <-- "debounced write" --> Persist
+```
 
 **Tech stack**：Astro 6（SSR, Node standalone）+ Vue 3 islands + Pinia + UnoCSS（presetWind4）、
 Vite、TypeScript。MCP 用 `@modelcontextprotocol/sdk`。
