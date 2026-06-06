@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { runClaude, isRunning } from '../../lib/claudeRunner';
 import { getState, workspacePath } from '../../lib/serverState';
+import { crossOriginBlocked } from '../../lib/guard';
 
 const SKILL_INSTALL_PATH = resolve(homedir(), '.claude', 'skills', 'bump-layout', 'SKILL.md');
 
@@ -36,6 +37,15 @@ ${prompt}
 };
 
 export const POST: APIRoute = async ({ request }) => {
+  // Localhost dev server has no auth; without this guard a malicious page the
+  // user visits could POST cross-origin and trigger arbitrary `claude --print`
+  // runs (RCE-equivalent on this user's machine).
+  if (crossOriginBlocked(request)) {
+    return new Response(JSON.stringify({ error: 'cross-origin blocked' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   let body: { kind?: string };
   try {
     body = await request.json();

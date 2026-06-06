@@ -2,13 +2,20 @@ import type { APIRoute } from 'astro';
 import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve, dirname } from 'node:path';
+import { crossOriginBlocked } from '../../lib/guard';
 
 export const prerender = false;
 
 /** Copy the bundled bump-layout skill from the repo into the user's
  * ~/.claude/skills/ so claude --print can find /bump-layout.
  * Idempotent: if the destination already exists, returns ok without copying. */
-export const POST: APIRoute = async () => {
+export const POST: APIRoute = async ({ request }) => {
+  if (crossOriginBlocked(request)) {
+    return new Response(JSON.stringify({ error: 'cross-origin blocked' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const src = resolve(process.cwd(), 'skills', 'bump-layout', 'SKILL.md');
   const dst = resolve(homedir(), '.claude', 'skills', 'bump-layout', 'SKILL.md');
 
