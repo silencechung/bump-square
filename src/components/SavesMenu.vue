@@ -4,7 +4,7 @@
  * re-open / delete earlier saves. The list is fetched from the server; loading
  * replaces the live board (its new state arrives via SSE).
  */
-import { ref } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 import { useWorkspaceStore } from '../stores/workspace';
 
@@ -14,6 +14,17 @@ const open = ref(false);
 const name = ref('');
 const root = ref<HTMLElement | null>(null);
 onClickOutside(root, () => { open.value = false; });
+
+// Save As modal
+const showSaveAs = ref(false);
+const saveAsName = ref('');
+const saveAsInput = ref<HTMLInputElement | null>(null);
+
+const isDuplicate = computed(() =>
+  saveAsName.value.trim() !== '' &&
+  store.saves.some(s => s.name === saveAsName.value.trim())
+);
+const canConfirm = computed(() => saveAsName.value.trim() !== '' && !isDuplicate.value);
 
 function toggle() {
   open.value = !open.value;
@@ -25,6 +36,25 @@ async function save() {
   if (!n) return;
   await store.saveCurrent(n);
   name.value = '';
+}
+
+function openSaveAs() {
+  saveAsName.value = '';
+  showSaveAs.value = true;
+  nextTick(() => saveAsInput.value?.focus());
+}
+
+async function confirmSaveAs() {
+  if (!canConfirm.value) return;
+  await store.saveCurrent(saveAsName.value.trim());
+  showSaveAs.value = false;
+  saveAsName.value = '';
+  open.value = false;
+}
+
+function closeSaveAs() {
+  showSaveAs.value = false;
+  saveAsName.value = '';
 }
 
 function load(id: string) {
@@ -51,7 +81,7 @@ function fmt(ts: number) {
       v-if="open"
       class="absolute right-0 mt-2 w-72 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl shadow-black/40 p-3 z-50"
     >
-      <!-- Save current -->
+      <!-- Quick save -->
       <div class="flex items-center gap-2">
         <input
           v-model="name"
@@ -66,6 +96,12 @@ function fmt(ts: number) {
           @click="save"
         >儲存</button>
       </div>
+
+      <!-- Save As button -->
+      <button
+        class="mt-2 w-full text-left text-xs px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors"
+        @click="openSaveAs"
+      >📋 另存新檔…</button>
 
       <!-- Saves list -->
       <div class="mt-3 border-t border-zinc-700/60 pt-2 max-h-72 overflow-y-auto no-scrollbar">
@@ -95,5 +131,44 @@ function fmt(ts: number) {
         </ul>
       </div>
     </div>
+
+    <!-- Save As Modal -->
+    <Teleport to="body">
+      <div
+        v-if="showSaveAs"
+        class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        @click.self="closeSaveAs"
+        @keydown.esc.capture="closeSaveAs"
+      >
+        <div class="bg-zinc-800 border border-zinc-700 rounded-2xl shadow-2xl shadow-black/60 p-6 w-80 max-w-[90vw]">
+          <h3 class="text-sm font-semibold text-zinc-100 mb-4">另存新檔</h3>
+
+          <input
+            ref="saveAsInput"
+            v-model="saveAsName"
+            type="text"
+            placeholder="輸入存檔名稱…"
+            class="w-full text-sm px-3 py-2 rounded-lg bg-zinc-900 border text-zinc-100 outline-none transition-colors"
+            :class="isDuplicate
+              ? 'border-red-500 focus:border-red-500'
+              : 'border-zinc-700 focus:border-violet-500'"
+            @keydown.enter="confirmSaveAs"
+            @keydown.esc.stop="closeSaveAs"
+          />
+          <p v-if="isDuplicate" class="mt-1.5 text-xs text-red-400">
+            「{{ saveAsName.trim() }}」已存在，請使用其他名稱。
+          </p>
+
+          <div class="mt-5 flex justify-end gap-2">
+            <button class="text-sm px-4 py-1.5 btn-neutral" @click="closeSaveAs">取消</button>
+            <button
+              class="text-sm px-4 py-1.5 btn-primary"
+              :disabled="!canConfirm"
+              @click="confirmSaveAs"
+            >儲存</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
