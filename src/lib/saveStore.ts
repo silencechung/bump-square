@@ -7,6 +7,7 @@ import {
   existsSync,
   renameSync,
 } from 'node:fs';
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { v4 as uuid } from 'uuid';
 import type { WorkspaceState } from './serverState';
@@ -22,7 +23,7 @@ import type { WorkspaceState } from './serverState';
  * This is separate from the single auto-persisted workspace.json (the live
  * board); saves are explicit, named, and many.
  */
-const SAVES_DIR = resolve(process.cwd(), '.bump-square', 'saves');
+const SAVES_DIR = resolve(homedir(), '.bump-square', 'saves');
 
 export interface SaveMeta {
   id: string;

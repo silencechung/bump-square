@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { resolve, basename } from 'node:path';
 import { v4 as uuid } from 'uuid';
 
@@ -10,7 +11,7 @@ import { v4 as uuid } from 'uuid';
  * Files are stored under .bump-square/uploads/ (gitignored, self-contained) and
  * served back to the browser via the /api/image/[name] route.
  */
-const UPLOAD_DIR = resolve(process.cwd(), '.bump-square', 'uploads');
+const UPLOAD_DIR = resolve(homedir(), '.bump-square', 'uploads');
 
 const MIME_EXT: Record<string, string> = {
   'image/png': 'png',

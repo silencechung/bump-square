@@ -37,17 +37,3 @@ export interface StructureNode {
 }
 
 export type WorkflowStep = 'upload' | 'layout' | 'structure';
-
-/**
- * A UI → agent signal. The browser pushes one of these when the user wants
- * Claude to act on the current board (e.g. infer roles for new frames). The
- * agent watches the SSE stream, picks up pending requests, acts, then resolves
- * them. `kind` is open-ended so new agent actions can reuse the same channel.
- */
-export interface AgentRequest {
-  id: string;
-  kind: 'review' | string;
-  note?: string;            // optional freeform context from the user
-  status: 'pending' | 'done';
-  createdAt: number;
-}

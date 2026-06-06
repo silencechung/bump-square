@@ -1,8 +1,9 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, watch } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { v4 as uuid } from 'uuid';
-import type { Asset, Square, StructureNode, AgentRequest } from '../types';
+import type { Asset, Square, StructureNode } from '../types';
 
 /**
  * Single source of truth for the live workspace, held in module scope so it
@@ -20,7 +21,6 @@ export interface WorkspaceState {
   squares: Square[];
   structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
   agentNotes: { id: string; text: string; timestamp: number }[];
-  agentRequests: AgentRequest[];
 }
 
 function emptyState(): WorkspaceState {
@@ -30,11 +30,13 @@ function emptyState(): WorkspaceState {
     squares: [],
     structure: { tree: null, prompt: null, assetsPrompt: null },
     agentNotes: [],
-    agentRequests: [],
   };
 }
 
-const SAVE_PATH = resolve(process.cwd(), '.bump-square', 'workspace.json');
+const SAVE_PATH = resolve(homedir(), '.bump-square', 'workspace.json');
+
+/** Absolute path of workspace.json on disk (for external tools like claude --print). */
+export const workspacePath = SAVE_PATH;
 const SAVE_DEBOUNCE_MS = 400;
 
 function loadFromDisk(): WorkspaceState | null {
@@ -64,10 +66,6 @@ const g = globalThis as unknown as {
 };
 
 const state: WorkspaceState = g.__bumpSquareState ?? (g.__bumpSquareState = loadFromDisk() ?? emptyState());
-// Backfill fields added after this state object was first created. Across HMR
-// the object persists on globalThis, so a newly-added field (e.g. agentRequests)
-// would otherwise be undefined on an already-running server.
-if (!state.agentRequests) state.agentRequests = [];
 
 const bus: EventEmitter = g.__bumpSquareBus ?? (g.__bumpSquareBus = new EventEmitter());
 bus.setMaxListeners(50);
@@ -86,6 +84,9 @@ function snapshotBoard(s: WorkspaceState): BoardSnapshot {
   });
 }
 
+// Suppress fs.watch callback for writes we initiated (atomic rename triggers it).
+let _suppressWatch = false;
+
 /** Debounced atomic write: serialize to a temp file then rename, so a crash
  * mid-write can never leave a half-written workspace.json. */
 function scheduleSave() {
@@ -94,13 +95,40 @@ function scheduleSave() {
     try {
       mkdirSync(dirname(SAVE_PATH), { recursive: true });
       const tmp = `${SAVE_PATH}.tmp`;
+      _suppressWatch = true;
       writeFileSync(tmp, JSON.stringify(state), 'utf8');
       renameSync(tmp, SAVE_PATH);
+      setTimeout(() => { _suppressWatch = false; }, 200);
     } catch (err) {
+      _suppressWatch = false;
       console.error('[bump-square] Failed to save workspace.json:', err);
     }
   }, SAVE_DEBOUNCE_MS);
 }
+
+// Eagerly persist on module load so external tools (claude --print) always
+// find a current snapshot at workspacePath, even after a cold HMR restart.
+scheduleSave();
+
+// Watch for external writes (e.g. from claude --print). When workspace.json
+// changes on disk and we didn't write it, reload and broadcast to SSE clients.
+(function setupFileWatch() {
+  const dir = dirname(SAVE_PATH);
+  try {
+    mkdirSync(dir, { recursive: true });
+    watch(dir, (_, filename) => {
+      if (filename !== 'workspace.json' || _suppressWatch) return;
+      try {
+        const raw = readFileSync(SAVE_PATH, 'utf8');
+        const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
+        Object.assign(state, { ...emptyState(), ...parsed });
+        bus.emit('change', state);
+      } catch { /* mid-write or parse error — skip */ }
+    });
+  } catch (err) {
+    console.error('[bump-square] Could not watch workspace dir:', err);
+  }
+}());
 
 export function getState(): WorkspaceState {
   return state;
@@ -162,67 +190,6 @@ export function addAgentNote(text: string) {
 /** Clear the agent message log (UI-side housekeeping; doesn't touch board state). */
 export function clearAgentNotes() {
   mutate(s => { s.agentNotes = []; }, { history: false });
-}
-
-/**
- * Real-time "doorbell": POST the request into the fakechat channel's inbound
- * endpoint so it surfaces in the live Claude Code session as a
- * <channel source="fakechat"> event the instant the user clicks — no polling,
- * no dev-flag self-channel. fakechat is on the official allowlist, so the
- * session launches with the CLEAN flag:
- *   claude --channels plugin:fakechat@claude-plugins-official
- *
- * The text is the agent-facing protocol: it leads with a [bump-square] marker
- * plus kind + request_id so Claude recognises it (the channel tag's own
- * `source` is "fakechat", not "bump-square") and can resolve_request afterwards.
- *
- * Fire-and-forget: fakechat may not be running (session launched without the
- * channel). The doorbell must NEVER break the actual enqueue, so every error is
- * swallowed. The board still works; it just isn't push-woken.
- */
-const FAKECHAT_URL = process.env.FAKECHAT_URL ?? 'http://localhost:8787';
-
-function ringFakechat(req: AgentRequest) {
-  const text =
-    `[bump-square] kind=${req.kind} request_id=${req.id}` +
-    (req.note ? `\n\n${req.note}` : '\n\n(no inline payload — read the canvas with get_board_state)');
-  try {
-    const form = new FormData();
-    form.set('id', `bsq-${req.id}`);
-    form.set('text', text);
-    fetch(`${FAKECHAT_URL}/upload`, { method: 'POST', body: form }).catch(() => {});
-  } catch {
-    /* FormData/fetch unavailable or threw synchronously — ignore */
-  }
-}
-
-/** UI → agent: queue a request for Claude to act on the board. Also drops an
- * INSTANT server-side acknowledgement note, so the page reflects "received"
- * the moment the user clicks — independent of when the (latency-bound) main
- * agent actually wakes up to handle it. */
-export function addAgentRequest(kind: string, note?: string): AgentRequest {
-  const req: AgentRequest = { id: uuid(), kind, note, status: 'pending', createdAt: Date.now() };
-  mutate(s => {
-    s.agentRequests.push(req);
-    if (s.agentRequests.length > 30) s.agentRequests.shift();
-    s.agentNotes.push({
-      id: uuid(),
-      text: `📥 收到請求（${kind}）— Claude 處理中，通常數秒內；若沒反應可在對話中戳一下。`,
-      timestamp: Date.now(),
-    });
-    if (s.agentNotes.length > 50) s.agentNotes.shift();
-  }, { history: false });
-  ringFakechat(req);
-  return req;
-}
-
-/** Agent → done: drop a handled request (by id), or all pending if no id. */
-export function resolveAgentRequest(id?: string) {
-  mutate(s => {
-    s.agentRequests = id
-      ? s.agentRequests.filter(r => r.id !== id)
-      : s.agentRequests.filter(r => r.status !== 'pending');
-  }, { history: false });
 }
 
 /** Every frame geometrically contained fully within `src` (its whole nested

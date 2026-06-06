@@ -1,9 +1,0 @@
-{
-    "mcpServers": {
-      "bump-square": {
-        "command": "npx",
-        "args": ["tsx", "mcp/server.ts"],
-        "env": { "BUMP_SQUARE_URL": "http://localhost:4399" }
-      }
-    }
-  }

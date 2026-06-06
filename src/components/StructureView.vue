@@ -42,7 +42,7 @@ function resetPrompt() {
   promptDraft.value = null;
 }
 
-const assetsPending = computed(() => store.isRequestPending('suggest-assets'));
+const assetsPending = computed(() => store.terminalRunning);
 
 const renderedPrompt = computed(() => md.render(effectivePrompt.value || ''));
 
@@ -59,15 +59,15 @@ function copyHandoff() {
         <!-- Stage 3 — hand the confirmed spec off to the dev agent. -->
         <button
           class="text-sm px-5 py-1.5 btn font-medium"
-          :class="store.isRequestPending('handoff')
-            ? 'bg-amber-300 text-amber-950 hover:bg-amber-200'
+          :class="store.terminalRunning
+            ? 'bg-amber-300 text-amber-950'
             : 'bg-violet-400 text-violet-950 hover:bg-violet-300'"
-          :disabled="!store.structure.tree"
-          :title="store.isRequestPending('handoff')
-            ? 'Handing off… click to cancel'
+          :disabled="!store.structure.tree || store.terminalRunning"
+          :title="store.terminalRunning
+            ? 'Claude 正在執行中…'
             : 'Send this confirmed console-tree spec to the dev agent to build'"
-          @click="store.isRequestPending('handoff') ? store.cancelAgentRequest('handoff') : store.requestAgent('handoff', effectivePrompt)"
-        >{{ store.isRequestPending('handoff') ? '⏳ 送交中… ✕' : '🚀 送交開發' }}</button>
+          @click="store.runClaude('handoff')"
+        >{{ store.terminalRunning ? '⏳ 送交中…' : '🚀 送交開發' }}</button>
       </div>
     </div>
 
@@ -162,8 +162,8 @@ function copyHandoff() {
             :title="assetsPending
               ? 'Claude is drafting the assets prompt… click to cancel'
               : 'Have Claude draft an asset-generation prompt from the structure, appended below'"
-            @click="assetsPending ? store.cancelAgentRequest('suggest-assets') : store.requestAgent('suggest-assets')"
-          >{{ assetsPending ? '⏳ 生成中… ✕' : '✨ 生成 assets prompt' }}</button>
+            @click="store.runClaude('suggest-assets')"
+          >{{ assetsPending ? '⏳ 生成中…' : '✨ 生成 assets prompt' }}</button>
           <span class="text-xs text-zinc-500">由 agent 依結構推敲，附加在最下方</span>
         </div>
       </div>

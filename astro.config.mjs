@@ -10,6 +10,9 @@ export default defineConfig({
 
   server: { port: 4399 },
 
+  // Hide the floating Astro dev toolbar (the island/audit overlay at the bottom).
+  devToolbar: { enabled: false },
+
   integrations: [
     // Picks up uno.config.ts and injects the generated stylesheet into pages and
     // Vue islands. Replaces the previous @tailwindcss/vite plugin.

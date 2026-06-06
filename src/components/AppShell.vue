@@ -7,6 +7,8 @@ import AgentPanel from './AgentPanel.vue';
 import AgentPanelToggle from './AgentPanelToggle.vue';
 import StructureView from './StructureView.vue';
 import SavesMenu from './SavesMenu.vue';
+import TerminalPanel from './TerminalPanel.vue';
+import SkillInstallBanner from './SkillInstallBanner.vue';
 
 const store = useWorkspaceStore();
 
@@ -29,6 +31,9 @@ const hasStructure = computed(() => !!store.structure.tree);
 
 // Right-side agent panel is collapsible to give the canvas more room.
 const agentOpen = ref(true);
+
+// Bottom terminal panel: default closed, toggled by the >_ button in the header.
+const terminalOpen = ref(false);
 
 // Reset is destructive (wipes the whole board), so it's a two-click confirm:
 // first click arms it ("確定清空？"), second within 3s actually resets. Auto-
@@ -81,6 +86,14 @@ function canVisit(s: string): boolean {
         >✓ structure ready →</span>
         <SavesMenu />
         <button
+          class="text-xs px-2 py-1 rounded font-mono font-medium transition-colors"
+          :class="terminalOpen
+            ? 'bg-violet-600 text-white hover:bg-violet-500'
+            : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'"
+          title="切換 claude --print 終端機面板"
+          @click="terminalOpen = !terminalOpen"
+        >&gt;_</button>
+        <button
           class="text-xs px-3 py-1 rounded-full font-medium transition-colors"
           :class="confirmingReset
             ? 'bg-red-500 text-white hover:bg-red-400'
@@ -107,5 +120,8 @@ function canVisit(s: string): boolean {
       <AgentPanel v-if="agentOpen" @collapse="agentOpen = false" />
       <AgentPanelToggle v-else @expand="agentOpen = true" />
     </div>
+
+    <TerminalPanel :open="terminalOpen" @close="terminalOpen = false" />
+    <SkillInstallBanner />
   </div>
 </template>

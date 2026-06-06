@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { v4 as uuid } from 'uuid';
-import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, addAgentRequest, resolveAgentRequest, clearAgentNotes } from '../../lib/serverState';
+import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, clearAgentNotes } from '../../lib/serverState';
 import { listSaves, createSave, loadSave, deleteSave } from '../../lib/saveStore';
 import { crossOriginBlocked } from '../../lib/guard';
 import type { Square } from '../../types';
@@ -90,17 +90,6 @@ export const POST: APIRoute = async ({ request }) => {
           s.assets = s.assets.filter(x => x.id !== payload.id);
           for (const sq of s.squares) sq.assets = sq.assets.filter(a => a !== payload.id);
         });
-        break;
-
-      case 'requestAgent': {
-        const req = addAgentRequest((payload.kind as string) ?? 'review', payload.note as string | undefined);
-        return json({ ok: true, id: req.id });
-      }
-
-      case 'cancelAgentRequest':
-        // User-side escape hatch: clear pending requests so a slow/unresponsive
-        // agent can never leave a button stuck in its waiting state.
-        resolveAgentRequest(payload.id as string | undefined);
         break;
 
       case 'clearAgentNotes':

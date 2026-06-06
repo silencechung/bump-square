@@ -260,16 +260,16 @@ const {
            structure tree from the confirmed frames + comments + aiNotes. -->
       <button
         class="text-sm px-5 py-1.5 rounded-full font-medium transition-colors disabled:opacity-40 disabled:cursor-default"
-        :class="store.isRequestPending('generate-structure')
-          ? 'bg-amber-300 text-amber-950 hover:bg-amber-200'
+        :class="store.terminalRunning
+          ? 'bg-amber-300 text-amber-950'
           : 'bg-violet-400 text-violet-950 hover:bg-violet-300'"
-        :disabled="store.squares.length === 0"
-        :title="store.isRequestPending('generate-structure')
-          ? 'Claude is generating… click to cancel'
+        :disabled="store.squares.length === 0 || store.terminalRunning"
+        :title="store.terminalRunning
+          ? 'Claude 正在執行中…'
           : 'Confirm layout → have Claude generate the intent structure tree'"
-        @click="store.isRequestPending('generate-structure') ? store.cancelAgentRequest('generate-structure') : store.requestAgent('generate-structure')"
+        @click="store.runClaude('generate-structure')"
       >
-        {{ store.isRequestPending('generate-structure') ? '⏳ 產生中… ✕' : '🧩 產生意圖結構' }}
+        {{ store.terminalRunning ? '⏳ 產生中…' : '🧩 產生意圖結構' }}
       </button>
 
       <!-- View controls (zoom), grouped as one unit, distinct from the tools. -->
