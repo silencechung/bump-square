@@ -265,7 +265,7 @@ const {
           : 'bg-violet-400 text-violet-950 hover:bg-violet-300'"
         :disabled="store.squares.length === 0 || store.terminalRunning"
         :title="store.terminalRunning
-          ? 'Claude 正在執行中…'
+          ? 'Claude 正在執行中 — 點 header 的 >_ 看詳細輸出'
           : 'Confirm layout → have Claude generate the intent structure tree'"
         @click="store.runClaude('generate-structure')"
       >

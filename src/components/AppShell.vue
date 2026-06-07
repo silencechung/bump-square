@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue';
+import { onMounted, computed, ref, watch } from 'vue';
 import { useWorkspaceStore } from '../stores/workspace';
 import UploadPanel from './UploadPanel.vue';
 import WorkspaceCanvas from './WorkspaceCanvas.vue';
@@ -33,7 +33,16 @@ const hasStructure = computed(() => !!store.structure.tree);
 const agentOpen = ref(true);
 
 // Bottom terminal panel: default closed, toggled by the >_ button in the header.
+// Auto-opens on first claude run so users discover the progress view; if they
+// manually close it mid-run we respect that choice (don't re-open).
 const terminalOpen = ref(false);
+let autoOpenedOnce = false;
+watch(() => store.terminalRunning, (running) => {
+  if (running && !autoOpenedOnce) {
+    terminalOpen.value = true;
+    autoOpenedOnce = true;
+  }
+});
 
 // Reset is destructive (wipes the whole board), so it's a two-click confirm:
 // first click arms it ("確定清空？"), second within 3s actually resets. Auto-
@@ -86,13 +95,25 @@ function canVisit(s: string): boolean {
         >✓ structure ready →</span>
         <SavesMenu />
         <button
-          class="text-xs px-2 py-1 rounded font-mono font-medium transition-colors"
+          class="relative text-xs px-2 py-1 rounded font-mono font-medium transition-colors"
           :class="terminalOpen
             ? 'bg-violet-600 text-white hover:bg-violet-500'
             : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'"
-          title="切換 claude --print 終端機面板"
+          :title="store.terminalRunning && !terminalOpen
+            ? 'Claude 正在執行中 — 點擊展開終端機面板'
+            : '切換 claude --print 終端機面板'"
           @click="terminalOpen = !terminalOpen"
-        >&gt;_</button>
+        >
+          &gt;_
+          <span
+            v-if="store.terminalRunning && !terminalOpen"
+            class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 animate-ping"
+          />
+          <span
+            v-if="store.terminalRunning && !terminalOpen"
+            class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400"
+          />
+        </button>
         <button
           class="text-xs px-3 py-1 rounded-full font-medium transition-colors"
           :class="confirmingReset
