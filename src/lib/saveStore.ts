@@ -30,7 +30,7 @@ export interface SaveMeta {
   name: string;
   savedAt: number;
 }
-/** A save stores only the BOARD (not the agentNotes/agentRequests session log). */
+/** A save stores only the BOARD (not the agentNotes session log). */
 type BoardState = Pick<WorkspaceState, 'sourceImage' | 'assets' | 'squares' | 'structure'>;
 interface SaveRecord extends SaveMeta {
   state: BoardState;
@@ -67,7 +67,7 @@ export function listSaves(): SaveMeta[] {
 }
 
 /** Snapshot the given state under a name. Atomic write (tmp → rename).
- * Only the board is stored — the agentNotes/agentRequests log is session-scoped. */
+ * Only the board is stored — the agentNotes log is session-scoped. */
 export function createSave(name: string, state: WorkspaceState): SaveMeta {
   mkdirSync(SAVES_DIR, { recursive: true });
   const meta: SaveMeta = { id: uuid(), name: name.trim() || 'Untitled', savedAt: Date.now() };

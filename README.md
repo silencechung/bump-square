@@ -29,14 +29,15 @@ flowchart LR
 3. **Structure** — agent 依幾何包含關係 + 各框 comment 組出可收合的結構樹，並渲染成可編輯的 markdown prompt。
 4. **Handoff** — 把編輯後的意圖 spec 交棒給下游 agent / developer（產出由對方決定）。
 
-這個 live Claude session 本身就是那個 agent：透過 MCP 讀寫同一份 workspace 狀態，並接收 UI
-觸發的即時請求（door­bell）。
+每次按 UI 上的 agent 按鈕，dev server 會 spawn 一個 `claude --print` 行程
+（搭配 `/bump-layout` skill），直接讀寫 `~/.bump-square/workspace.json`；server 用
+`fs.watch` 偵測檔案變更後 SSE 推回瀏覽器。底部 xterm panel 顯示 agent 即時輸出。
 
 ## 需求
 
 - **Node ≥ 22**（實際以 24 測試）
 - **pnpm**（沒有的話 `install.sh` 會用 corepack 啟用）
-- 完整 agent 流程需要 **Claude Code**，並以 fakechat channel 啟動（見下方）
+- **Claude Code CLI**（agent 流程用）— 第一次需 `claude login`（支援 Google OAuth），之後不需 API key
 
 ## 安裝
 
@@ -44,11 +45,13 @@ flowchart LR
 git clone <repo-url> bump-square
 cd bump-square
 pnpm install        # 相依套件（跨平台）
-pnpm run setup      # 把 skill 連進 ~/.claude/skills/（接 Claude Code 流程用）
+pnpm run setup      # 可選：裝 /bump-square ops skill 到 ~/.claude/skills/
 ```
 
-`pnpm run setup --copy` 改成複製 skill（而非 symlink）。安裝器是 Node 寫的（`scripts/install.mjs`），
-Linux / macOS / Windows 通用。只想跑 app（不接 agent）的話，`pnpm install` 即可。
+`pnpm run setup` 只裝 `/bump-square` ops skill（給人用：health-check、起 dev server）。
+**agent 真正需要的 `bump-layout` skill 由 app 第一次跑時自動安裝**——按下「產生意圖結構」會偵測
+skill 缺失並顯示一鍵安裝 banner（從 repo 內 `skills/bump-layout/SKILL.md` 複製到
+`~/.claude/skills/bump-layout/SKILL.md`）。安裝器是 Node 寫的（`scripts/install.mjs`），跨平台。
 
 ## 使用
 
@@ -57,92 +60,98 @@ pnpm dev            # dev server → http://localhost:4399
 pnpm build          # 產生 production build
 ```
 
-### 接上 Claude Code（即時 agent 流程）
+**不需要 `claude --channels` 之類的特殊啟動模式**——dev server 自己會在每次 agent 動作時 spawn `claude --print`。
 
-door­bell（UI 觸發 → 即時進到 session）走官方 **fakechat** channel：
-
-```bash
-claude --channels plugin:fakechat@claude-plugins-official
-```
-
-- channel 只送達**用這個 flag 啟動的 main session**（sub-agent 收不到）。
-- fakechat 服務 :8787 必須在跑（一次 `/mcp` reconnect 會把它拉起來）。
-- MCP server 由專案的 `.mcp.json` 在你開啟此專案時自動 spawn。
-
-#### Doorbell 時序圖
+### Agent 流程時序圖
 
 ```mermaid
 sequenceDiagram
     participant UI as 瀏覽器 UI
-    participant FC as fakechat :8787
-    participant Ch as Claude Channel
-    participant Agent as Claude Agent
     participant Srv as server :4399
+    participant Term as TerminalPanel<br/>(xterm)
+    participant CC as claude --print<br/>(Claude Code CLI)
+    participant FS as ~/.bump-square/<br/>workspace.json
 
-    UI->>FC: ringFakechat() POST (kind, request_id)
-    FC->>Ch: channel source="fakechat"
-    Ch->>Agent: 門鈴事件
-    Agent->>Srv: get_board_state (MCP)
-    Srv-->>Agent: board state
-    Agent->>Srv: set_structure / set_assets_prompt (MCP)
-    Agent->>Srv: resolve_request(id) (MCP)
-    Agent->>FC: reply
-    FC-->>UI: 回應顯示
+    UI->>Srv: POST /api/run-claude { kind }
+    Note over Srv: pre-flight 檢查 bump-layout skill
+    alt skill 不存在
+        Srv-->>UI: 409 skill-missing
+        UI->>Srv: POST /api/install-skill
+        Srv-->>UI: ok → auto-retry
+    end
+    Srv-->>UI: 202 Accepted
+    Srv->>CC: spawn /bump-layout prompt<br/>(model=sonnet, stream-json)
+    CC->>FS: Read workspace.json
+    Srv-->>Term: SSE /api/terminal/events<br/>(stream-json → xterm 行)
+    CC->>FS: Write structure 回 workspace.json
+    FS-->>Srv: fs.watch 觸發 reload
+    Srv-->>UI: SSE /api/events<br/>(新 state 推送)
+    CC-->>Srv: exit 0
+    Srv-->>Term: ✓ done
 ```
-
-裝好 skill 後，在任何目錄輸入 `/bump-square` 即可帶起環境並 health-check 各 port。
 
 ## 架構
 
-單一真實來源在 server，瀏覽器與 agent 都讀寫同一份。
+單一真實來源是 `~/.bump-square/workspace.json`，瀏覽器與 `claude --print` 都讀寫同一份。
 
 | 檔案 | 角色 |
 |---|---|
-| `src/lib/serverState.ts` | **single source of truth**；持久化到 `.bump-square/workspace.json`，含 undo/redo |
+| `src/lib/serverState.ts` | **single source of truth**；持久化到 `~/.bump-square/workspace.json`（debounced atomic write），含 undo/redo；**`fs.watch` 偵測外部寫入**並廣播 |
 | `src/pages/api/events.ts` | **SSE** `/api/events`，把權威狀態推給瀏覽器 |
 | `src/pages/api/state.ts` | 瀏覽器 → server 的 mutation |
-| `src/pages/api/mcp.ts` | agent → server 的工具面 |
-| `mcp/server.ts` | stdio **MCP bridge**，把工具呼叫 HTTP 轉發到 `/api/mcp` |
+| `src/pages/api/run-claude.ts` | 瀏覽器 → server 觸發 agent；組 `/bump-layout` prompt、spawn `claude --print` |
+| `src/lib/claudeRunner.ts` | `claude --print` lifecycle（同時只跑一個，後續排 queue）；解析 stream-json、餵給 xterm |
+| `src/pages/api/terminal/events.ts` | SSE `/api/terminal/events`，把 xterm chunks 推給 `TerminalPanel` |
+| `src/pages/api/install-skill.ts` | 把 `skills/bump-layout/SKILL.md` 複製到 `~/.claude/skills/`（idempotent） |
+| `skills/bump-layout/SKILL.md` | `/bump-layout` skill：`claude --print` 用它讀寫 `workspace.json` |
+| `src/components/TerminalPanel.vue` | 底部 xterm readonly panel（首次跑時自動展開） |
+| `src/components/SkillInstallBanner.vue` | skill 缺失時的一鍵安裝 banner |
 | `src/lib/containment.ts` | 幾何包含關係（結構樹的依據） |
 | `src/stores/workspace.ts` | Pinia store，瀏覽器端唯讀鏡像 + dispatch |
-| `.claude/skills/bump-square/` | Claude Code skill：環境帶起 + health-check |
+| `.claude/skills/bump-square/` | 可選 ops skill（`/bump-square` 幫使用者起 dev server + health-check） |
 
 ### 資料流
 
 ```mermaid
 flowchart TB
-    Browser["瀏覽器\nVue 3 + Pinia"]
-    Agent["Claude Agent\nlive session"]
+    Browser["瀏覽器\nVue 3 + Pinia + xterm"]
 
     subgraph Server ["bump-square server :4399"]
         SS[("serverState\nsingle source of truth")]
         EventsAPI["/api/events SSE"]
         StateAPI["/api/state mutation"]
-        McpAPI["/api/mcp tools"]
+        RunAPI["/api/run-claude"]
+        TermAPI["/api/terminal/events SSE"]
+        Runner["claudeRunner\n(spawn + stream)"]
     end
 
-    McpBridge["mcp/server.ts\nstdio MCP bridge"]
-    Persist[(".bump-square/workspace.json")]
+    CC["claude --print\n(spawned per action)"]
+    Persist[(".bump-square/workspace.json\n@ ~/.bump-square/")]
 
     Browser -- "action + payload" --> StateAPI
     StateAPI --> SS
     SS --> EventsAPI
-    EventsAPI -- "SSE 推送狀態" --> Browser
+    EventsAPI -- "SSE 狀態推送" --> Browser
 
-    Agent -- "MCP 工具呼叫" --> McpBridge
-    McpBridge -- "HTTP POST" --> McpAPI
-    McpAPI --> SS
+    Browser -- "POST { kind }" --> RunAPI
+    RunAPI --> Runner
+    Runner -- "spawn + /bump-layout prompt" --> CC
+    Runner -- "stream-json → xterm chunks" --> TermAPI
+    TermAPI -- "SSE xterm" --> Browser
 
-    SS <-- "debounced write" --> Persist
+    CC -- "Read / Write" --> Persist
+    SS <-- "debounced write + fs.watch" --> Persist
+    SS --> EventsAPI
 ```
 
 **Tech stack**：Astro 6（SSR, Node standalone）+ Vue 3 islands + Pinia + UnoCSS（presetWind4）、
-Vite、TypeScript。MCP 用 `@modelcontextprotocol/sdk`。
+Vite、TypeScript、xterm.js。Agent 用 Claude Code CLI（`claude --print`），不需要 Anthropic API key。
 
-API 為 localhost-only，state-mutating endpoint 以 `Sec-Fetch-Site` 做 CSRF guard
-（見 `src/lib/guard.ts`）。`.bump-square/`（持久化狀態、上傳圖片、存檔）整個 gitignore。
+API 為 localhost-only，state-mutating endpoint（`/api/state`、`/api/run-claude`、`/api/install-skill`）
+以 `Sec-Fetch-Site` 做 CSRF guard（見 `src/lib/guard.ts`）——沒這個守則，使用者開到惡意網頁就能
+跨站觸發任意 `claude --print` 執行。`.bump-square/`（持久化狀態、上傳圖片、存檔）整個 gitignore。
 
-開發者導向的完整說明（door­bell 協定、agent 視角操作）見 [`CLAUDE.md`](./CLAUDE.md)。
+開發者導向的完整說明（agent 操作協定、stream-json 過濾、檔案監看細節）見 [`CLAUDE.md`](./CLAUDE.md)。
 
 ## License
 

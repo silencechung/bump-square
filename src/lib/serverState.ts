@@ -7,13 +7,13 @@ import type { Asset, Square, StructureNode } from '../types';
 
 /**
  * Single source of truth for the live workspace, held in module scope so it
- * persists across HTTP requests within the same Node process. Both the browser
- * (via /api/state/* + SSE) and Claude (via the MCP bridge → /api/mcp/*) read
- * and mutate THIS object.
+ * persists across HTTP requests within the same Node process. The browser
+ * mutates via /api/state/* and observes via /api/events (SSE); the agent
+ * (`claude --print` spawned by /api/run-claude) reads/writes the persisted
+ * file (~/.bump-square/workspace.json) directly, and a fs.watch on that
+ * file reloads this in-memory state and broadcasts to SSE listeners.
  *
- * It is ALSO persisted to disk (.bump-square/workspace.json) so the board
- * survives a full server restart — important because restarting Claude Code
- * kills the dev server, and we don't want to lose hand-drawn frames/comments.
+ * The disk file IS the truth across process restarts.
  */
 export interface WorkspaceState {
   sourceImage: { url: string; filename: string; mediaType: string; width: number; height: number } | null;
@@ -53,8 +53,8 @@ function loadFromDisk(): WorkspaceState | null {
 }
 
 // Survive Astro dev HMR by stashing on globalThis; load from disk on cold start.
-/** Board-only slice that undo/redo snapshots (the agentNotes/agentRequests log
- * is intentionally NOT part of history, so undoing an edit doesn't wipe notes). */
+/** Board-only slice that undo/redo snapshots (the agentNotes log is
+ * intentionally NOT part of history, so undoing an edit doesn't wipe notes). */
 type BoardSnapshot = Pick<WorkspaceState, 'sourceImage' | 'assets' | 'squares' | 'structure'>;
 
 const g = globalThis as unknown as {
@@ -273,8 +273,8 @@ export function resetState() {
 }
 
 /** Replace the live BOARD with a loaded snapshot (named save). The
- * agentNotes/agentRequests session log is deliberately left untouched — saves
- * don't carry it, and loading one shouldn't wipe the current log. */
+ * agentNotes session log is deliberately left untouched — saves don't carry
+ * it, and loading one shouldn't wipe the current log. */
 export function replaceState(snapshot: Partial<WorkspaceState>) {
   const empty = emptyState();
   mutate(s => {
