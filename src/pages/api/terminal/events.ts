@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getTerminalBuffer, subscribeTerminal, subscribeTerminalClear, subscribeRunning, isRunning } from '../../../lib/claudeRunner';
+import { getTerminalBuffer, subscribeTerminal, subscribeTerminalClear, subscribeRunning, runningKind } from '../../../lib/claudeRunner';
 
 export const prerender = false;
 
@@ -22,13 +22,13 @@ export const GET: APIRoute = async () => {
       const sendClear = () => {
         controller.enqueue(encoder.encode(`event: clear\ndata: 1\n\n`));
       };
-      const sendStatus = (running: boolean) => {
-        controller.enqueue(encoder.encode(`event: status\ndata: ${JSON.stringify({ running })}\n\n`));
+      const sendStatus = (kind: string | null) => {
+        controller.enqueue(encoder.encode(`event: status\ndata: ${JSON.stringify({ kind })}\n\n`));
       };
 
       // Force-flush HTTP headers immediately (node adapter buffers until first write)
       controller.enqueue(encoder.encode(': connected\n\n'));
-      sendStatus(isRunning());
+      sendStatus(runningKind());
 
       // Replay history
       const history = getTerminalBuffer().join('\n');

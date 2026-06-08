@@ -24,16 +24,6 @@ workspace: ${workspacePath}
 workspace: ${workspacePath}
 根據目前的 structure.tree 推敲每個節點需要的視覺素材。
 完成後更新 workspace.json 的 structure.assetsPrompt 欄位（markdown 格式）。`,
-  'handoff': (s) => {
-    const prompt = s.structure.prompt ?? '（尚無結構 prompt）';
-    return `/bump-layout
-workspace: ${workspacePath}
-以下是從 bump-square 送交的意圖結構 spec：
-
-${prompt}
-
-在 ~/Documents/Projects 下實作對應的 Vue 3 元件（Vite + TypeScript）。`;
-  },
 };
 
 export const POST: APIRoute = async ({ request }) => {
@@ -72,9 +62,11 @@ export const POST: APIRoute = async ({ request }) => {
   const prompt = PROMPTS[kind](getState());
 
   // Fire-and-forget: respond 202 immediately; claude streams via /api/terminal/events.
-  runClaude(prompt).catch((err) => console.error('[run-claude] error:', err));
+  // Pass kind so the runner can broadcast it on status events — buttons key off
+  // matching kind so only the one you pressed shows a spinner.
+  runClaude(prompt, kind).catch((err) => console.error('[run-claude] error:', err));
 
-  return new Response(JSON.stringify({ ok: true, running: isRunning() }), {
+  return new Response(JSON.stringify({ ok: true, running: isRunning(), kind }), {
     status: 202,
     headers: { 'Content-Type': 'application/json' },
   });

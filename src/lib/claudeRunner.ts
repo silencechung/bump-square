@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { loadConfig, claudeArgsFromConfig } from './config';
 
 const MAX_BUFFER_LINES = 10000;
 
@@ -7,6 +8,7 @@ const g = globalThis as unknown as {
   __bumpClaudeBuffer?: string[];
   __bumpClaudeBus?: EventEmitter;
   __bumpClaudeRunning?: boolean;
+  __bumpClaudeRunningKind?: string | null;
   __bumpClaudeQueue?: Array<() => void>;
 };
 
@@ -15,6 +17,7 @@ const bus: EventEmitter = g.__bumpClaudeBus ?? (g.__bumpClaudeBus = new EventEmi
 bus.setMaxListeners(100);
 
 if (g.__bumpClaudeRunning === undefined) g.__bumpClaudeRunning = false;
+if (g.__bumpClaudeRunningKind === undefined) g.__bumpClaudeRunningKind = null;
 if (!g.__bumpClaudeQueue) g.__bumpClaudeQueue = [];
 
 const queue: Array<() => void> = g.__bumpClaudeQueue;
@@ -51,9 +54,11 @@ export function subscribeTerminalClear(cb: () => void): () => void {
   return () => bus.off('clear', cb);
 }
 
-export function subscribeRunning(cb: (running: boolean) => void): () => void {
-  const onStart = () => cb(true);
-  const onDone = () => cb(false);
+/** Subscribe to start/done — payload is the kind currently running, or null
+ * when the run finished. Buttons key off this to spin only on their own kind. */
+export function subscribeRunning(cb: (kind: string | null) => void): () => void {
+  const onStart = (kind: string) => cb(kind);
+  const onDone = () => cb(null);
   bus.on('start', onStart);
   bus.on('done', onDone);
   return () => { bus.off('start', onStart); bus.off('done', onDone); };
@@ -61,6 +66,12 @@ export function subscribeRunning(cb: (running: boolean) => void): () => void {
 
 export function isRunning(): boolean {
   return g.__bumpClaudeRunning ?? false;
+}
+
+/** Kind of the run currently in flight, or null if idle. Used by the SSE
+ * endpoint to emit a status snapshot on connect. */
+export function runningKind(): string | null {
+  return g.__bumpClaudeRunningKind ?? null;
 }
 
 /** Translate one stream-json line into a human-readable xterm chunk, or null
@@ -98,10 +109,18 @@ function formatStreamEvent(line: string): string | null {
   }
 
   if (type === 'user') {
-    // tool_result: keep silent unless it errored
+    // tool_result: silent on success; on error surface the first 120 chars so
+    // it's actionable (and obvious whether the agent recovered or not).
     const message = ev.message as { content?: Array<Record<string, unknown>> } | undefined;
-    const errored = message?.content?.some(b => b.is_error);
-    return errored ? `\x1b[31m✗ tool error\x1b[0m\r\n` : null;
+    const errBlock = message?.content?.find(b => b.is_error);
+    if (!errBlock) return null;
+    const raw = typeof errBlock.content === 'string'
+      ? errBlock.content
+      : Array.isArray(errBlock.content)
+        ? errBlock.content.map(c => (c as Record<string, unknown>).text ?? '').join(' ')
+        : '';
+    const snippet = raw.replace(/\s+/g, ' ').trim().slice(0, 120);
+    return `\x1b[33m⚠ tool error\x1b[0m ${snippet ? `\x1b[90m${snippet}\x1b[0m` : ''}\r\n`;
   }
 
   if (type === 'result') {
@@ -111,23 +130,22 @@ function formatStreamEvent(line: string): string | null {
   return null;
 }
 
-export function runClaude(prompt: string): Promise<void> {
+export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
   return new Promise((resolve, reject) => {
     const task = () => {
       g.__bumpClaudeRunning = true;
-      bus.emit('start');
-      pushChunk(`\r\n\x1b[33m▶ claude --print\x1b[0m\r\n`);
+      g.__bumpClaudeRunningKind = kind;
+      bus.emit('start', kind);
+      pushChunk(`\r\n\x1b[33m▶ claude --print\x1b[0m \x1b[90m(${kind})\x1b[0m\r\n`);
 
-      const child = spawn('claude', [
-        '--print', prompt,
-        '--model', 'sonnet',
-        '--output-format', 'stream-json',
-        '--verbose',
-        '--allowedTools', 'Read,Write,Edit',
-      ], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: false,
-      });
+      // Re-read config on each spawn so edits to ~/.bump-square/config.json
+      // take effect on the next agent action — no dev-server restart needed.
+      const cfg = loadConfig();
+      const child = spawn(
+        'claude',
+        ['--print', prompt, ...claudeArgsFromConfig(cfg.claude)],
+        { stdio: ['ignore', 'pipe', 'pipe'], shell: false },
+      );
 
       // stream-json emits one JSON object per line. Translate the meaningful
       // events to xterm-friendly progress lines; drop hook noise — but show a
@@ -171,6 +189,7 @@ export function runClaude(prompt: string): Promise<void> {
           : `\r\n\x1b[31m✗ exit ${code}\x1b[0m\r\n`;
         pushChunk(msg);
         g.__bumpClaudeRunning = false;
+        g.__bumpClaudeRunningKind = null;
         bus.emit('done', code);
         resolve();
         runNext();
@@ -179,6 +198,7 @@ export function runClaude(prompt: string): Promise<void> {
       child.on('error', (err) => {
         pushChunk(`\r\n\x1b[31m⚠ spawn error: ${err.message}\x1b[0m\r\n`);
         g.__bumpClaudeRunning = false;
+        g.__bumpClaudeRunningKind = null;
         bus.emit('done', -1);
         reject(err);
         runNext();

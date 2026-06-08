@@ -20,8 +20,9 @@ async function install() {
     v-if="store.skillMissing"
     class="fixed top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-lg bg-amber-500/95 text-amber-950 shadow-lg backdrop-blur"
   >
-    <span class="text-sm">
-      ⚠️ <strong>bump-layout</strong> skill 尚未安裝 — Claude 無法產生意圖結構
+    <span class="text-sm flex items-center gap-1.5">
+      <span class="i-lucide-triangle-alert" />
+      <span><strong>bump-layout</strong> skill 尚未安裝 — Claude 無法產生意圖結構</span>
     </span>
     <button
       class="text-xs px-3 py-1 rounded bg-amber-900 text-amber-50 hover:bg-amber-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
@@ -32,6 +33,8 @@ async function install() {
       class="text-xs text-amber-900 hover:text-amber-700 px-1 transition-colors"
       title="關閉"
       @click="store.dismissSkillMissing()"
-    >✕</button>
+    >
+      <span class="i-lucide-x" />
+    </button>
   </div>
 </template>

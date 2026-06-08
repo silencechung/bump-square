@@ -62,7 +62,9 @@ function focusFrame() {
         <span
           v-if="node.comment"
           class="text-sm text-zinc-400 leading-relaxed break-words"
-        >💬 {{ node.comment }}</span>
+        >
+          <span class="i-lucide-message-square inline-block mr-1 -mt-0.5 align-middle" />{{ node.comment }}
+        </span>
       </button>
 
       <span

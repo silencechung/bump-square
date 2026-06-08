@@ -1,4 +1,5 @@
 import { defineConfig, presetWind4 } from 'unocss';
+import presetIcons from '@unocss/preset-icons';
 
 /**
  * UnoCSS config (replaces the previous Tailwind v4 setup).
@@ -15,6 +16,16 @@ export default defineConfig({
   presets: [
     presetWind4({
       preflights: { reset: true },
+    }),
+    // Monoline Lucide icons via CSS classes: `<span class="i-lucide-save" />`.
+    // currentColor + 1em sizing means they inherit text colour & font-size, so
+    // the black + purple Bazzite theme stays coherent (no rainbow OS emojis).
+    presetIcons({
+      scale: 1.1,
+      extraProperties: {
+        display: 'inline-block',
+        'vertical-align': '-0.125em',
+      },
     }),
   ],
 

@@ -58,7 +58,7 @@ function connectSSE() {
   });
   es.addEventListener('clear', () => term?.clear());
   es.addEventListener('status', (e) => {
-    store.setTerminalRunning(JSON.parse((e as MessageEvent).data).running);
+    store.setRunningKind(JSON.parse((e as MessageEvent).data).kind ?? null);
   });
 }
 
@@ -130,17 +130,21 @@ function onDragEnd() {
     <!-- Toolbar -->
     <div class="flex items-center gap-2 px-3 py-1 border-b border-zinc-700 shrink-0">
       <span class="text-xs text-zinc-400 font-mono select-none">claude --print</span>
-      <div class="ml-auto flex items-center gap-2">
+      <div class="ml-auto flex items-center gap-1">
         <button
-          class="text-xs text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded hover:bg-zinc-700 transition-colors"
-          title="清除終端機"
+          class="w-7 h-7 icon-btn hover:text-red-400"
+          title="清除終端機輸出"
           @click="term?.clear()"
-        >Clear</button>
+        >
+          <span class="i-lucide-trash-2" />
+        </button>
         <button
-          class="text-xs text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-700 transition-colors"
-          title="關閉終端機面板"
+          class="w-7 h-7 icon-btn hover:text-zinc-100"
+          title="關閉終端機面板（Ctrl+`）"
           @click="emit('close')"
-        >✕</button>
+        >
+          <span class="i-lucide-x" />
+        </button>
       </div>
     </div>
 

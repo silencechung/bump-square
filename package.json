@@ -37,10 +37,12 @@
     ]
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.111",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.19.19",
     "@types/uuid": "^11.0.0",
     "@unocss/astro": "^66.7.0",
+    "@unocss/preset-icons": "^66.7.0",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
     "unocss": "^66.7.0",

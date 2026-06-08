@@ -42,8 +42,6 @@ function resetPrompt() {
   promptDraft.value = null;
 }
 
-const assetsPending = computed(() => store.terminalRunning);
-
 const renderedPrompt = computed(() => md.render(effectivePrompt.value || ''));
 
 function copyHandoff() {
@@ -55,20 +53,7 @@ function copyHandoff() {
   <div class="flex-1 flex flex-col overflow-hidden p-6 gap-4">
     <div class="flex items-center justify-between">
       <h2 class="text-sm font-semibold text-zinc-300">Generated Structure</h2>
-      <div class="flex items-center gap-2">
-        <!-- Stage 3 — hand the confirmed spec off to the dev agent. -->
-        <button
-          class="text-sm px-5 py-1.5 btn font-medium"
-          :class="store.terminalRunning
-            ? 'bg-amber-300 text-amber-950'
-            : 'bg-violet-400 text-violet-950 hover:bg-violet-300'"
-          :disabled="!store.structure.tree || store.terminalRunning"
-          :title="store.terminalRunning
-            ? 'Claude 正在執行中 — 點 header 的 >_ 看詳細輸出'
-            : 'Send this confirmed console-tree spec to the dev agent to build'"
-          @click="store.runClaude('handoff')"
-        >{{ store.terminalRunning ? '⏳ 送交中…' : '🚀 送交開發' }}</button>
-      </div>
+      <span class="text-xs text-zinc-500">AI actions 在 header 右上角</span>
     </div>
 
     <!-- Three tabs over one pane: Tree (visual) · JSON (raw) · Prompt (the
@@ -89,7 +74,10 @@ function copyHandoff() {
           >{{ t.label }}</button>
         </div>
         <div v-if="viewMode === 'prompt'" class="ml-auto flex items-center gap-3">
-          <span v-if="isEdited" class="text-sm text-amber-400">✏ 已編輯</span>
+          <span v-if="isEdited" class="text-sm text-amber-400 flex items-center gap-1">
+            <span class="i-lucide-pencil" />
+            <span>已編輯</span>
+          </span>
           <button
             v-if="isEdited"
             class="text-sm px-4 py-1.5 btn-neutral"
@@ -152,20 +140,6 @@ function copyHandoff() {
           class="flex-1 overflow-auto no-scrollbar resize-none whitespace-pre bg-zinc-900 border border-zinc-800 focus:border-violet-500 rounded-lg p-4 text-sm text-zinc-200 font-mono leading-relaxed outline-none"
           @input="promptDraft = ($event.target as HTMLTextAreaElement).value"
         ></textarea>
-        <div class="flex items-center gap-2 shrink-0">
-          <button
-            class="text-sm px-4 py-1.5 btn font-medium"
-            :class="assetsPending
-              ? 'bg-amber-300 text-amber-950 hover:bg-amber-200'
-              : 'bg-cyan-400 text-cyan-950 hover:bg-cyan-300'"
-            :disabled="!store.structure.tree"
-            :title="assetsPending
-              ? 'Claude is drafting the assets prompt… click to cancel'
-              : 'Have Claude draft an asset-generation prompt from the structure, appended below'"
-            @click="store.runClaude('suggest-assets')"
-          >{{ assetsPending ? '⏳ 生成中…' : '✨ 生成 assets prompt' }}</button>
-          <span class="text-xs text-zinc-500">由 agent 依結構推敲，附加在最下方</span>
-        </div>
       </div>
     </div>
   </div>

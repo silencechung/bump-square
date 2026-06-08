@@ -29,6 +29,9 @@ export interface SaveMeta {
   id: string;
   name: string;
   savedAt: number;
+  /** Absolute path on disk — the client copies this for downstream agents
+   * (reader skills) to load. Always under SAVES_DIR/<id>.json. */
+  path: string;
 }
 /** A save stores only the BOARD (not the agentNotes session log). */
 type BoardState = Pick<WorkspaceState, 'sourceImage' | 'assets' | 'squares' | 'structure'>;
@@ -53,8 +56,9 @@ export function listSaves(): SaveMeta[] {
       .filter(f => f.endsWith('.json'))
       .map(f => {
         try {
-          const rec = JSON.parse(readFileSync(resolve(SAVES_DIR, f), 'utf8')) as SaveRecord;
-          return { id: rec.id, name: rec.name, savedAt: rec.savedAt };
+          const full = resolve(SAVES_DIR, f);
+          const rec = JSON.parse(readFileSync(full, 'utf8')) as SaveRecord;
+          return { id: rec.id, name: rec.name, savedAt: rec.savedAt, path: full };
         } catch {
           return null;
         }
@@ -70,7 +74,10 @@ export function listSaves(): SaveMeta[] {
  * Only the board is stored — the agentNotes log is session-scoped. */
 export function createSave(name: string, state: WorkspaceState): SaveMeta {
   mkdirSync(SAVES_DIR, { recursive: true });
-  const meta: SaveMeta = { id: uuid(), name: name.trim() || 'Untitled', savedAt: Date.now() };
+  const id = uuid();
+  const target = fileFor(id);
+  if (!target) throw new Error('createSave: generated id failed validation');
+  const meta: SaveMeta = { id, name: name.trim() || 'Untitled', savedAt: Date.now(), path: target };
   // Deep clone so later board mutations don't bleed into the saved snapshot.
   const board: BoardState = {
     sourceImage: state.sourceImage,
@@ -79,10 +86,6 @@ export function createSave(name: string, state: WorkspaceState): SaveMeta {
     structure: state.structure,
   };
   const record: SaveRecord = { ...meta, state: structuredClone(board) };
-  // meta.id is a fresh uuid so fileFor never rejects it, but narrow the type
-  // (fileFor returns string | null for the path-traversal guard) before use.
-  const target = fileFor(meta.id);
-  if (!target) throw new Error('createSave: generated id failed validation');
   const tmp = `${target}.tmp`;
   writeFileSync(tmp, JSON.stringify(record), 'utf8');
   renameSync(tmp, target);

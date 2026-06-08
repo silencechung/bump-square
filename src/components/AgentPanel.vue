@@ -22,17 +22,24 @@ function fmt(ts: number) {
   <aside class="w-72 shrink-0 bg-zinc-800 border-l border-zinc-700/60 flex flex-col overflow-hidden">
     <div class="p-3 border-b border-zinc-700/60 flex items-center gap-2">
       <button
-        class="w-8 h-8 icon-btn hover:text-zinc-100 text-xl leading-none"
+        class="w-8 h-8 icon-btn hover:text-zinc-100"
         title="Collapse agent panel"
         @click="$emit('collapse')"
-      >›</button>
-      <h2 class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">🤖 Agent</h2>
+      >
+        <span class="i-lucide-chevron-right text-lg" />
+      </button>
+      <h2 class="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+        <span class="i-lucide-bot text-violet-400" />
+        <span>Agent</span>
+      </h2>
       <button
         v-if="store.agentNotes.length"
         class="ml-auto w-8 h-8 icon-btn hover:text-red-400"
         title="Clear all agent messages"
         @click="store.clearAgentNotes()"
-      >🗑</button>
+      >
+        <span class="i-lucide-trash-2" />
+      </button>
       <span
         class="flex items-center gap-1.5 text-xs"
         :class="[store.connected ? 'text-cyan-400' : 'text-zinc-600', store.agentNotes.length ? '' : 'ml-auto']"
@@ -65,7 +72,8 @@ function fmt(ts: number) {
     </div>
 
     <div class="p-3 border-t border-zinc-700/60 text-xs text-zinc-500 leading-relaxed">
-      💬 The conversation happens in your terminal. This board syncs live via MCP.
+      <span class="i-lucide-message-square inline-block mr-1" />
+      The conversation happens in your terminal. This board syncs live via MCP.
     </div>
   </aside>
 </template>

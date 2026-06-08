@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, watch } from 'vue';
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue';
 import { useWorkspaceStore } from '../stores/workspace';
 import UploadPanel from './UploadPanel.vue';
 import WorkspaceCanvas from './WorkspaceCanvas.vue';
@@ -12,7 +12,27 @@ import SkillInstallBanner from './SkillInstallBanner.vue';
 
 const store = useWorkspaceStore();
 
-onMounted(() => store.connect());
+onMounted(() => {
+  store.connect();
+  window.addEventListener('keydown', onGlobalKeyDown);
+});
+onUnmounted(() => window.removeEventListener('keydown', onGlobalKeyDown));
+
+/** VSCode-style Ctrl+` (backtick) toggles the bottom terminal panel.
+ *
+ * Intentionally NO typing-guard — VSCode toggles the terminal regardless of
+ * focus, and the previous guard silently swallowed every press because the
+ * xterm panel mounts a hidden <textarea> for accessibility, so when the panel
+ * was open focus often landed there. Bare ` still works in any text editor
+ * (Ctrl is required for the toggle), so this doesn't disrupt markdown typing.
+ *
+ * Uses e.code ('Backquote' — the physical key) so non-US layouts still hit it. */
+function onGlobalKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.code === 'Backquote') {
+    e.preventDefault();
+    terminalOpen.value = !terminalOpen.value;
+  }
+}
 
 const steps = ['upload', 'layout', 'structure'] as const;
 const stepLabels: Record<string, string> = {
@@ -28,6 +48,42 @@ const stepTitles: Record<string, string> = {
 };
 
 const hasStructure = computed(() => !!store.structure.tree);
+const hasSquares = computed(() => store.squares.length > 0);
+const busy = computed(() => store.runningKind !== null);
+
+// Latest save path → copy to clipboard so downstream reader skill / agent
+// can be told exactly which file to read. Briefly flips the icon to ✓ as
+// visual feedback (no toast library).
+const latestSave = computed(() => store.saves[0] ?? null);
+const copyFeedback = ref(false);
+async function copyLatestSavePath() {
+  if (!latestSave.value) return;
+  try {
+    await navigator.clipboard.writeText(latestSave.value.path);
+    copyFeedback.value = true;
+    setTimeout(() => { copyFeedback.value = false; }, 1500);
+  } catch { /* clipboard blocked — ignore silently */ }
+}
+
+// The three claude-calling actions, surfaced together in the header so the
+// user always knows "what the AI can do right now" — visibility is independent
+// of the current step, gated only by data prerequisites.
+const aiActions = computed(() => [
+  {
+    kind: 'generate-structure',
+    label: '產生結構',
+    runningLabel: '產生中…',
+    canRun: hasSquares.value,
+    why: hasSquares.value ? '依 Frame + comment 產生意圖結構樹' : '先在 Layout 畫至少一個 Frame',
+  },
+  {
+    kind: 'suggest-assets',
+    label: 'Assets',
+    runningLabel: '生成中…',
+    canRun: hasStructure.value,
+    why: hasStructure.value ? '由 agent 依結構推敲視覺素材' : '先產生結構',
+  },
+]);
 
 // Right-side agent panel is collapsible to give the canvas more room.
 const agentOpen = ref(true);
@@ -90,38 +146,82 @@ function canVisit(s: string): boolean {
       <div class="ml-auto flex items-center gap-3">
         <span
           v-if="hasStructure && store.step !== 'structure'"
-          class="text-xs text-emerald-400 cursor-pointer hover:underline"
+          class="text-xs text-emerald-400 cursor-pointer hover:underline flex items-center gap-1"
           @click="store.step = 'structure'"
-        >✓ structure ready →</span>
-        <SavesMenu />
-        <button
-          class="relative text-xs px-2 py-1 rounded font-mono font-medium transition-colors"
-          :class="terminalOpen
-            ? 'bg-violet-600 text-white hover:bg-violet-500'
-            : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'"
-          :title="store.terminalRunning && !terminalOpen
-            ? 'Claude 正在執行中 — 點擊展開終端機面板'
-            : '切換 claude --print 終端機面板'"
-          @click="terminalOpen = !terminalOpen"
         >
-          &gt;_
-          <span
-            v-if="store.terminalRunning && !terminalOpen"
-            class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 animate-ping"
-          />
-          <span
-            v-if="store.terminalRunning && !terminalOpen"
-            class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400"
-          />
-        </button>
-        <button
-          class="text-xs px-3 py-1 rounded-full font-medium transition-colors"
-          :class="confirmingReset
-            ? 'bg-red-500 text-white hover:bg-red-400'
-            : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-red-400'"
-          :title="confirmingReset ? '再按一次確認清空整個板面' : '清空整個板面'"
-          @click="onResetClick"
-        >{{ confirmingReset ? '確定清空？' : 'Reset' }}</button>
+          <span class="i-lucide-check-circle" />
+          <span>structure ready</span>
+          <span class="i-lucide-arrow-right" />
+        </span>
+        <!-- Save cluster: SavesMenu + copy-latest-path button. Paired because
+             "copy save path" is conceptually a save operation (it's the export
+             handoff the downstream reader skill consumes). -->
+        <div class="flex items-center gap-2">
+          <SavesMenu />
+          <!-- Copy latest save path → for downstream reader skill. Mirrors the
+               SavesMenu button's icon+text shape, so they read as a pair. -->
+          <button
+            class="text-xs px-3 py-1 btn-neutral flex items-center gap-1.5"
+            :class="{
+              'text-emerald-300': copyFeedback,
+              'opacity-40 cursor-default': !latestSave,
+            }"
+            :disabled="!latestSave"
+            :title="latestSave
+              ? (copyFeedback ? '已複製到剪貼簿！' : `複製最新 save 路徑（${latestSave.name}）給下游 reader skill`)
+              : '尚無 save — 先在「存檔」menu 存一份'"
+            @click="copyLatestSavePath"
+          >
+            <span :class="copyFeedback ? 'i-lucide-clipboard-check' : 'i-lucide-clipboard'" />
+            <span>{{ copyFeedback ? '已複製' : '複製路徑' }}</span>
+          </button>
+        </div>
+
+        <!-- AI actions cluster — every button here calls `claude --print`.
+             Unified violet→cyan gradient + sparkle prefix marks them as AI-driven.
+             Each spins only when its own kind is in flight (no more linkage). -->
+        <div class="flex items-center gap-1 pl-3 border-l border-zinc-700">
+          <span class="text-[10px] text-zinc-500 uppercase tracking-wider pr-1">AI</span>
+          <button
+            v-for="a in aiActions"
+            :key="a.kind"
+            class="ai-btn"
+            :class="{
+              'ai-btn-running': store.runningKind === a.kind,
+              'ai-btn-idle': store.runningKind !== a.kind,
+            }"
+            :disabled="!a.canRun || busy"
+            :title="store.runningKind === a.kind
+              ? `Claude 正在執行 ${a.kind}…`
+              : busy
+                ? '另一個 AI action 進行中，請稍候'
+                : a.why"
+            @click="store.runClaude(a.kind)"
+          >
+            <span
+              v-if="store.runningKind === a.kind"
+              class="i-lucide-loader-2 animate-spin"
+            />
+            <span v-else class="i-lucide-sparkles" />
+            <span>{{ store.runningKind === a.kind ? a.runningLabel : a.label }}</span>
+          </button>
+        </div>
+
+        <!-- Destructive: kept apart from save / AI clusters by its own separator
+             so it can't be mis-clicked while reaching for the AI buttons. -->
+        <div class="flex items-center pl-3 border-l border-zinc-700">
+          <button
+            class="text-xs px-3 py-1 rounded-full font-medium transition-colors flex items-center gap-1.5"
+            :class="confirmingReset
+              ? 'bg-red-500 text-white hover:bg-red-400'
+              : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-red-400'"
+            :title="confirmingReset ? '再按一次確認清空整個板面' : '清空整個板面（不可復原；undo/redo 也會清掉）'"
+            @click="onResetClick"
+          >
+            <span class="i-lucide-trash-2" />
+            <span>{{ confirmingReset ? '確定清空？' : 'Reset' }}</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -143,6 +243,111 @@ function canVisit(s: string): boolean {
     </div>
 
     <TerminalPanel :open="terminalOpen" @close="terminalOpen = false" />
+
+    <!-- VSCode-style status bar: terminal toggle bottom-left, plus running
+         status. Always visible, sits below the (collapsible) terminal panel. -->
+    <footer class="shrink-0 h-6 border-t border-zinc-800 bg-zinc-950 flex items-center px-2 text-[11px] text-zinc-400 select-none">
+      <button
+        class="status-toggle"
+        :class="{ 'status-toggle-open': terminalOpen, 'status-toggle-busy': busy }"
+        :title="`切換 claude --print 終端機面板（Ctrl+\`）`"
+        @click="terminalOpen = !terminalOpen"
+      >
+        <span class="i-lucide-terminal" />
+        <span class="font-mono">claude --print</span>
+        <span v-if="busy" class="busy-dot" />
+        <span v-if="busy" class="text-amber-400">{{ store.runningKind }}</span>
+      </button>
+      <span class="ml-auto pr-1 text-zinc-600">
+        <span v-if="store.connected" class="text-emerald-500">●</span>
+        <span v-else class="text-red-500">●</span>
+        SSE
+      </span>
+    </footer>
+
     <SkillInstallBanner />
   </div>
 </template>
+
+<style scoped>
+/* Visual signature for "this button calls claude --print". Distinct gradient
+   so users instantly recognise AI actions vs local UI controls (Reset, Saves,
+   step tabs). */
+.ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+  transition: filter 0.15s, transform 0.15s, opacity 0.15s;
+}
+.ai-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.ai-btn:not(:disabled):hover {
+  filter: brightness(1.12);
+  transform: translateY(-0.5px);
+}
+.ai-btn-idle {
+  background: linear-gradient(135deg, rgb(124 58 237) 0%, rgb(6 182 212) 100%);
+  color: white;
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.35);
+}
+.ai-btn-running {
+  background: linear-gradient(135deg, rgb(251 191 36) 0%, rgb(245 158 11) 100%);
+  color: rgb(120 53 15);
+  animation: ai-pulse-bg 1.4s ease-in-out infinite;
+}
+@keyframes ai-pulse-bg {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.6); }
+  50%      { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.25); }
+}
+.ai-pulse {
+  display: inline-block;
+  animation: ai-spin 1.4s linear infinite;
+}
+@keyframes ai-spin {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(180deg); }
+}
+
+/* Bottom status bar: thin VSCode-like strip with the terminal toggle on the
+   left. Distinct from header so users don't conflate "AI actions" (top-right,
+   purple/cyan) with "panel toggle" (bottom-left, neutral). */
+.status-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.6rem;
+  height: 100%;
+  color: rgb(212 212 216);
+  transition: background-color 0.15s;
+}
+.status-toggle:hover {
+  background: rgb(63 63 70);
+}
+.status-toggle-open {
+  background: rgb(124 58 237);
+  color: white;
+}
+.status-toggle-open:hover {
+  background: rgb(139 92 246);
+}
+.status-toggle-busy:not(.status-toggle-open) {
+  color: rgb(251 191 36);
+}
+.busy-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgb(251 191 36);
+  animation: status-dot-pulse 1.2s ease-in-out infinite;
+}
+@keyframes status-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+</style>
