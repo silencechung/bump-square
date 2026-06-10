@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-check
 //
 // bump-square skill installer (cross-platform).
 //

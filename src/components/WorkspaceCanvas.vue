@@ -180,20 +180,16 @@ function dismissAiNote(sq: Square) {
   store.updateSquare(sq.id, { aiNote: '' });
 }
 
-// Notes rail + leader lines + floating labels (XMind-style annotations off to
-// the side, in screen space so they track zoom/pan) extracted to a composable.
+// Notes rail + leader lines (hover + selection) extracted to a composable.
 const bodyRef = ref<HTMLDivElement | null>(null);
 const {
   notesOpen,
-  showLabels,
   hoveredFrameId,
   hoverRow,
   focusRow,
   leaderLine,
   measureSelectedRow,
   selectedLeaderLine,
-  labelLayout,
-  visibleLabels,
 } = useNotesRail(store, bodyRef, vp);
 </script>
 
@@ -210,7 +206,7 @@ const {
           title="Draw a new frame"
           @click="toggleDraw"
         >
-          <span class="w-4 text-center">▢</span> Frame
+          <span class="i-lucide-square" /> Frame
           <span class="relative w-9 h-5 rounded-full transition-colors" :class="drawMode ? 'bg-violet-400' : 'bg-zinc-600'">
             <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="drawMode ? 'left-[18px]' : 'left-0.5'"></span>
           </span>
@@ -221,20 +217,9 @@ const {
           title="Pan the canvas (or hold Space / middle-drag)"
           @click="toggleHand"
         >
-          <span class="w-4 text-center">✋</span> Hand
+          <span class="i-lucide-hand" /> Hand
           <span class="relative w-9 h-5 rounded-full transition-colors" :class="handMode ? 'bg-violet-400' : 'bg-zinc-600'">
             <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="handMode ? 'left-[18px]' : 'left-0.5'"></span>
-          </span>
-        </button>
-        <button
-          class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
-          role="switch" :aria-checked="showLabels"
-          title="Toggle: show ALL frame labels (default shows only the selected frame's)"
-          @click="showLabels = !showLabels"
-        >
-          <span class="w-4 text-center">🏷</span> Labels
-          <span class="relative w-9 h-5 rounded-full transition-colors" :class="showLabels ? 'bg-violet-400' : 'bg-zinc-600'">
-            <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="showLabels ? 'left-[18px]' : 'left-0.5'"></span>
           </span>
         </button>
       </div>
@@ -243,34 +228,22 @@ const {
       <!-- Undo / redo (Ctrl+Z · Ctrl+Shift+Z / Ctrl+Y). -->
       <div class="flex items-center gap-1 ml-2">
         <button
-          class="w-8 h-8 rounded-full flex items-center justify-center text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-default transition-colors"
+          class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
           title="復原 (Ctrl+Z)"
           :disabled="!store.canUndo"
           @click="store.undo()"
-        >↶</button>
+        >
+          <span class="i-lucide-undo-2" />
+        </button>
         <button
-          class="w-8 h-8 rounded-full flex items-center justify-center text-zinc-300 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-default transition-colors"
+          class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
           title="重做 (Ctrl+Shift+Z / Ctrl+Y)"
           :disabled="!store.canRedo"
           @click="store.redo()"
-        >↷</button>
+        >
+          <span class="i-lucide-redo-2" />
+        </button>
       </div>
-
-      <!-- Stage 2 — layout confirm: ask Claude to synthesize the intent
-           structure tree from the confirmed frames + comments + aiNotes. -->
-      <button
-        class="text-sm px-5 py-1.5 rounded-full font-medium transition-colors disabled:opacity-40 disabled:cursor-default"
-        :class="store.isRequestPending('generate-structure')
-          ? 'bg-amber-300 text-amber-950 hover:bg-amber-200'
-          : 'bg-violet-400 text-violet-950 hover:bg-violet-300'"
-        :disabled="store.squares.length === 0"
-        :title="store.isRequestPending('generate-structure')
-          ? 'Claude is generating… click to cancel'
-          : 'Confirm layout → have Claude generate the intent structure tree'"
-        @click="store.isRequestPending('generate-structure') ? store.cancelAgentRequest('generate-structure') : store.requestAgent('generate-structure')"
-      >
-        {{ store.isRequestPending('generate-structure') ? '⏳ 產生中… ✕' : '🧩 產生意圖結構' }}
-      </button>
 
       <!-- View controls (zoom), grouped as one unit, distinct from the tools. -->
       <div class="ml-auto flex items-center gap-1 bg-zinc-800/50 rounded-full p-0.5">
@@ -346,10 +319,6 @@ const {
             @mousedown.stop.prevent="startResize(sq, hd.h, $event)"
           />
         </template>
-        <!-- (Labels moved off the frame corner into floating tags — see the
-             v-for="L in labelLayout" block below. Stops them stacking on top of
-             each other for small / nested frames.) -->
-
         <!-- Assets inside square -->
         <div class="absolute inset-0 p-1 flex flex-wrap gap-1 content-start overflow-hidden">
           <div
@@ -371,31 +340,6 @@ const {
         class="absolute rounded border-2 border-dashed border-violet-400 bg-violet-400/10 pointer-events-none z-40"
         :style="g"
       />
-
-      <!-- Floating frame labels (XMind-style). Detached from the frame corner
-           and auto-staggered upward so coincident / nested frames don't pile
-           up; each links back to its frame via a connector line in the SVG.
-           Default: only the selected frame's label; 🏷 toolbar toggle shows all. -->
-      <div
-        v-for="L in visibleLabels"
-        :key="'tag-' + L.sq.id"
-        class="absolute z-20 flex items-center gap-1"
-        :style="{ left: L.tagX + 'px', top: L.tagY + 'px' }"
-      >
-        <!-- Display-only on the canvas. Renaming lives in the Notes panel (one
-             editor only → no autofocus fights). Double-click opens that editor. -->
-        <span
-          class="text-sm px-2 py-1 rounded-md cursor-pointer transition-colors whitespace-nowrap shadow-md"
-          :class="store.selectedSquareId === L.sq.id
-            ? 'bg-violet-600 text-white font-medium'
-            : 'bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700'"
-          title="Click to select · rename it in the Notes panel"
-          @click.stop="focusRow(L.sq)"
-          @dblclick.stop="startEditLabel(L.sq)"
-          @mouseenter="hoveredFrameId = L.sq.id"
-          @mouseleave="hoveredFrameId = null"
-        >{{ L.sq.label }}</span>
-      </div>
 
       <!-- Live draw preview (screen space) -->
       <div
@@ -420,11 +364,16 @@ const {
     <aside v-if="notesOpen" class="w-64 shrink-0 h-full border-l border-zinc-700/60 bg-[#2c2c33] overflow-y-auto overflow-x-hidden no-scrollbar" @scroll="measureSelectedRow">
       <div class="px-3 py-2.5 flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-300 border-b border-zinc-700/60 sticky top-0 bg-[#2c2c33]/95 backdrop-blur z-10">
         <button
-          class="w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 transition-colors normal-case text-xl leading-none"
+          class="w-8 h-8 icon-btn hover:text-zinc-100"
           title="Collapse notes rail"
           @click="notesOpen = false"
-        >›</button>
-        <span>📝 Notes · {{ store.squares.length }}</span>
+        >
+          <span class="i-lucide-chevron-right text-lg" />
+        </button>
+        <span class="flex items-center gap-1.5">
+          <span class="i-lucide-notebook-pen text-violet-400" />
+          <span>Notes · {{ store.squares.length }}</span>
+        </span>
       </div>
       <div
         v-if="store.squares.length === 0"
@@ -504,18 +453,26 @@ const {
           @click.stop
         >
           <div class="flex items-center gap-1 mb-0.5">
-            <span class="text-xs uppercase tracking-wide text-fuchsia-300/80">🤖 AI 推斷</span>
+            <span class="text-xs uppercase tracking-wide text-fuchsia-300/80 flex items-center gap-1">
+              <span class="i-lucide-bot" />
+              <span>AI 推斷</span>
+            </span>
             <span class="ml-auto flex items-center gap-1.5">
               <button
-                class="text-xs text-violet-300 hover:text-violet-100 transition-colors"
+                class="text-xs text-violet-300 hover:text-violet-100 transition-colors flex items-center gap-1"
                 title="採用為我的註解"
                 @click.stop="acceptAiNote(sq)"
-              >✓ 採用</button>
+              >
+                <span class="i-lucide-check" />
+                <span>採用</span>
+              </button>
               <button
                 class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
                 title="略過這個推斷"
                 @click.stop="dismissAiNote(sq)"
-              >✕</button>
+              >
+                <span class="i-lucide-x" />
+              </button>
             </span>
           </div>
           <p class="text-sm text-fuchsia-200/90 italic leading-snug whitespace-pre-wrap break-words">{{ sq.aiNote }}</p>
@@ -538,8 +495,13 @@ const {
         <p
           v-else-if="commentDisplay(sq) === 'card'"
           class="text-sm text-violet-100 bg-violet-900/25 border border-violet-700/40 rounded-lg px-2.5 py-1.5 leading-snug whitespace-pre-wrap break-words"
-        >💬 {{ sq.comment }}</p>
-        <span v-else class="text-xs text-zinc-600 italic">💬 add comment</span>
+        >
+          <span class="i-lucide-message-square inline-block mr-1 -mt-0.5 align-middle" />{{ sq.comment }}
+        </p>
+        <span v-else class="text-xs text-zinc-600 italic flex items-center gap-1">
+          <span class="i-lucide-message-square-plus" />
+          <span>add comment</span>
+        </span>
       </div>
     </aside>
     <!-- Collapsed → a thin vertical strip to reopen (mirrors the Agent panel). -->
@@ -549,22 +511,14 @@ const {
       title="Show notes rail"
       @click="notesOpen = true"
     >
-      <span class="text-xl leading-none">‹</span>
-      <span class="text-xs uppercase tracking-wider [writing-mode:vertical-rl]">📝 Notes</span>
+      <span class="i-lucide-chevron-left text-lg" />
+      <span class="i-lucide-notebook-pen text-violet-400" />
+      <span class="text-xs uppercase tracking-wider [writing-mode:vertical-rl]">Notes</span>
     </button>
 
     <!-- Leader line overlay: spans canvas + rail. Points from a frame's live
          on-screen edge to the hovered rail row, so it tracks zoom/pan. -->
     <svg class="absolute inset-0 w-full h-full pointer-events-none">
-      <!-- connector from each floating label tag down to its frame corner -->
-      <line
-        v-for="L in visibleLabels"
-        :key="'conn-' + L.sq.id"
-        :x1="L.tagX + 6" :y1="L.tagY + 20"
-        :x2="L.cornerX + 1" :y2="L.cornerY + 1"
-        :stroke="store.selectedSquareId === L.sq.id || hoveredFrameId === L.sq.id ? '#a78bfa' : '#52525b'"
-        stroke-width="1"
-      />
       <!-- selection leader line: from the SELECTED frame to its notes edit row,
            persists while selected so it's clear where to write the intent. -->
       <template v-if="selectedLeaderLine">

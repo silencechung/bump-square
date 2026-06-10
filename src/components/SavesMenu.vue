@@ -72,10 +72,13 @@ function fmt(ts: number) {
 <template>
   <div ref="root" class="relative">
     <button
-      class="text-xs px-3 py-1 btn-neutral"
+      class="text-xs px-3 py-1 btn-neutral flex items-center gap-1.5"
       title="存檔 / 載入元件設定"
       @click="toggle"
-    >💾 存檔</button>
+    >
+      <span class="i-lucide-save" />
+      <span>存檔</span>
+    </button>
 
     <div
       v-if="open"
@@ -99,9 +102,12 @@ function fmt(ts: number) {
 
       <!-- Save As button -->
       <button
-        class="mt-2 w-full text-left text-xs px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors"
+        class="mt-2 w-full text-xs px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors flex items-center gap-1.5"
         @click="openSaveAs"
-      >📋 另存新檔…</button>
+      >
+        <span class="i-lucide-file-plus" />
+        <span>另存新檔…</span>
+      </button>
 
       <!-- Saves list -->
       <div class="mt-3 border-t border-zinc-700/60 pt-2 max-h-72 overflow-y-auto no-scrollbar">
@@ -126,7 +132,9 @@ function fmt(ts: number) {
               class="w-7 h-7 shrink-0 icon-btn hover:text-red-400"
               title="刪除此存檔"
               @click.stop="store.removeSave(s.id)"
-            >✕</button>
+            >
+              <span class="i-lucide-x" />
+            </button>
           </li>
         </ul>
       </div>

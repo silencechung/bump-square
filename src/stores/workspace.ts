@@ -1,11 +1,11 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Asset, Square, StructureNode, WorkflowStep, AgentRequest } from '../types';
+import type { Asset, Square, StructureNode, WorkflowStep } from '../types';
 import type { Viewport } from '../lib/viewport';
 
 interface SourceImage { url: string; filename: string; mediaType: string; width: number; height: number }
 interface AgentNote { id: string; text: string; timestamp: number }
-interface SaveMeta { id: string; name: string; savedAt: number }
+interface SaveMeta { id: string; name: string; savedAt: number; path: string }
 
 interface ServerState {
   sourceImage: SourceImage | null;
@@ -13,7 +13,6 @@ interface ServerState {
   squares: Square[];
   structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
   agentNotes: AgentNote[];
-  agentRequests: AgentRequest[];
   canUndo?: boolean;
   canRedo?: boolean;
 }
@@ -21,8 +20,8 @@ interface ServerState {
 /**
  * Client mirror of the server-side source of truth. The browser never owns
  * state: it subscribes to /api/events (SSE) for authoritative snapshots and
- * POSTs mutations to /api/state. Claude mutates the SAME server state via the
- * MCP bridge, so its changes arrive here through the very same SSE channel.
+ * POSTs mutations to /api/state. Claude reads/writes the same workspace.json
+ * on disk, and fs.watch broadcasts those changes through the same SSE channel.
  */
 export const useWorkspaceStore = defineStore('workspace', () => {
   // --- Server-synced state (read-only mirror) ---
@@ -31,13 +30,19 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const squares = ref<Square[]>([]);
   const structure = ref<{ tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null }>({ tree: null, prompt: null, assetsPrompt: null });
   const agentNotes = ref<AgentNote[]>([]);
-  const agentRequests = ref<AgentRequest[]>([]);
 
   // --- Local-only UI state ---
   const step = ref<WorkflowStep>('upload');
   const selectedAssetId = ref<string | null>(null);
   const selectedSquareId = ref<string | null>(null);
   const connected = ref(false);
+  // Which claude --print kind is currently in flight (null = idle). Buttons
+  // key off matching this so only the one you pressed shows a spinner.
+  const runningKind = ref<string | null>(null);
+  const terminalRunning = computed(() => runningKind.value !== null);
+  // Set when /api/run-claude returns 409 skill-missing — the UI shows an
+  // install banner; clearing it (after install) auto-retries the original call.
+  const skillMissing = ref<{ kind: string; message: string } | null>(null);
   const saves = ref<SaveMeta[]>([]);
   const canUndo = ref(false);
   const canRedo = ref(false);
@@ -57,7 +62,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     squares.value = s.squares;
     structure.value = s.structure;
     agentNotes.value = s.agentNotes;
-    agentRequests.value = s.agentRequests ?? [];
     canUndo.value = s.canUndo ?? false;
     canRedo.value = s.canRedo ?? false;
 
@@ -136,27 +140,56 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (r?.saves) saves.value = r.saves;
   }
 
-  // UI → agent: ask Claude to act on the board. Result returns via SSE (the
-  // agent picks it up, acts, then resolves it).
-  const requestAgent = (kind = 'review', note?: string) => dispatch('requestAgent', { kind, note });
-  // Pending state is per-KIND: a pending generate-structure must not light up the
-  // handoff button (and vice-versa) — they're independent actions.
-  const isRequestPending = (kind: string) => agentRequests.value.some(r => r.status === 'pending' && r.kind === kind);
-  const cancelAgentRequest = (kind?: string) => {
-    if (!kind) return dispatch('cancelAgentRequest');
-    const req = agentRequests.value.find(r => r.status === 'pending' && r.kind === kind);
-    if (req) return dispatch('cancelAgentRequest', { id: req.id });
-  };
+  // Spawn claude --print for a given kind. Streams to /api/terminal/events.
+  // On 409 skill-missing, sets skillMissing — UI shows an install banner.
+  // The authoritative runningKind comes from the server via SSE; we set it
+  // optimistically here so the button spinner shows up before the SSE round-
+  // trip arrives, but the server overrides shortly after.
+  async function runClaude(kind: string, extraPayload?: Record<string, unknown>) {
+    runningKind.value = kind;
+    try {
+      const res = await fetch('/api/run-claude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, ...extraPayload }),
+      });
+      if (res.status === 409) {
+        const body = await res.json();
+        if (body.error === 'skill-missing') {
+          skillMissing.value = { kind, message: body.message ?? 'skill 未安裝' };
+          runningKind.value = null;
+        }
+      }
+    } catch { /* claudeRunner error will show in terminal */ }
+  }
+
+  // Install the bump-layout skill, then retry the deferred runClaude call.
+  async function installSkillAndRetry() {
+    const pending = skillMissing.value;
+    if (!pending) return;
+    const res = await fetch('/api/install-skill', { method: 'POST' });
+    if (!res.ok) return;
+    skillMissing.value = null;
+    await runClaude(pending.kind);
+  }
+
+  const dismissSkillMissing = () => { skillMissing.value = null; };
+
+  // Update running kind from server (TerminalPanel SSE status events). This
+  // is the authoritative source — runClaude() sets it optimistically, but the
+  // server's value wins (and clears it when claude --print exits).
+  const setRunningKind = (k: string | null) => { runningKind.value = k; };
 
   return {
-    sourceImage, assets, squares, structure, agentNotes, agentRequests,
-    step, selectedAssetId, selectedSquareId, connected, saves, canUndo, canRedo,
+    sourceImage, assets, squares, structure, agentNotes,
+    step, selectedAssetId, selectedSquareId, connected, runningKind, terminalRunning, skillMissing, saves, canUndo, canRedo,
     viewport, setViewport,
-    selectedAsset, selectedSquare, isRequestPending,
+    selectedAsset, selectedSquare,
     connect,
     uploadImage, addSquare, updateSquare, removeSquare, duplicateFrame,
     moveFrameGroup, pasteFrame, undo, redo,
-    placeAssetInSquare, updateAsset, removeAsset, reset, clearAgentNotes, requestAgent, cancelAgentRequest,
+    placeAssetInSquare, updateAsset, removeAsset, reset, clearAgentNotes,
+    runClaude, setRunningKind, installSkillAndRetry, dismissSkillMissing,
     refreshSaves, saveCurrent, loadSave, removeSave,
   };
 });

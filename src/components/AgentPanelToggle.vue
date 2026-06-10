@@ -11,7 +11,8 @@ defineEmits<{ expand: [] }>();
     title="Show agent panel"
     @click="$emit('expand')"
   >
-    <span class="text-xl leading-none">‹</span>
-    <span class="text-xs uppercase tracking-wider [writing-mode:vertical-rl]">🤖 Agent</span>
+    <span class="i-lucide-chevron-left text-lg" />
+    <span class="i-lucide-bot text-violet-400" />
+    <span class="text-xs uppercase tracking-wider [writing-mode:vertical-rl]">Agent</span>
   </button>
 </template>

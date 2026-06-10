@@ -5,19 +5,9 @@ import type { useWorkspaceStore } from '../stores/workspace';
 
 type Store = ReturnType<typeof useWorkspaceStore>;
 
-export interface TagSlot {
-  sq: Square;
-  tagX: number;
-  tagY: number;
-  cornerX: number;
-  cornerY: number;
-}
-
-const TAG_H = 22; // approx tag height + gap, in px
-
 /**
- * Notes-rail annotations: the XMind-style leader lines and floating labels that
- * connect on-canvas frames to their off-to-the-side notes rows.
+ * Notes-rail annotations: the leader lines that connect on-canvas frames to
+ * their off-to-the-side notes rows (selection + hover).
  *
  * Everything here is SCREEN space derived from the live viewport, so it re-flows
  * as you zoom/pan. Extracted from WorkspaceCanvas.vue (which kept all of this
@@ -27,8 +17,6 @@ const TAG_H = 22; // approx tag height + gap, in px
 export function useNotesRail(store: Store, bodyRef: Ref<HTMLDivElement | null>, vp: Ref<Viewport>) {
   // Notes rail is collapsible to give the canvas more room on small screens.
   const notesOpen = ref(true);
-  // 🏷 toolbar toggle: show ALL frame labels at once (default = selected only).
-  const showLabels = ref(false);
 
   // --- Hover leader line (hovering a notes-rail row highlights its frame) ---
   const hoveredFrameId = ref<string | null>(null);
@@ -110,43 +98,13 @@ export function useNotesRail(store: Store, bodyRef: Ref<HTMLDivElement | null>, 
     return { x1: p.x, y1: p.y, x2: selectedRailAnchor.value.x, y2: selectedRailAnchor.value.y };
   });
 
-  // --- Floating labels (auto-staggered so coincident/nested frames don't pile) ---
-  const labelLayout = computed<TagSlot[]>(() => {
-    const placed: TagSlot[] = [];
-    for (const sq of store.squares) {
-      const tl = imageToScreen({ x: sq.x, y: sq.y }, vp.value);
-      const tagX = tl.x;
-      let tagY = tl.y - TAG_H - 4; // default: just above the corner
-      // Climb upward while we'd collide with an already-placed nearby tag.
-      let guard = 0;
-      while (
-        guard++ < 30 &&
-        placed.some(p => Math.abs(p.tagX - tagX) < 130 && Math.abs(p.tagY - tagY) < TAG_H)
-      ) {
-        tagY -= TAG_H;
-      }
-      placed.push({ sq, tagX, tagY, cornerX: tl.x, cornerY: tl.y });
-    }
-    return placed;
-  });
-
-  // By default only the SELECTED frame's label shows; the 🏷 toggle shows all.
-  const visibleLabels = computed<TagSlot[]>(() =>
-    showLabels.value
-      ? labelLayout.value
-      : labelLayout.value.filter(L => L.sq.id === store.selectedSquareId),
-  );
-
   return {
     notesOpen,
-    showLabels,
     hoveredFrameId,
     hoverRow,
     focusRow,
     leaderLine,
     measureSelectedRow,
     selectedLeaderLine,
-    labelLayout,
-    visibleLabels,
   };
 }
