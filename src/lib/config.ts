@@ -9,11 +9,11 @@ import { resolve } from 'node:path';
  * merged ON TOP of the hardcoded defaults, so the file is purely OVERRIDES —
  * you only put in it what you want to change.
  *
- * Example: switch to opus and remove Bash from allowed tools:
+ * Example: switch to opus and add Bash to allowed tools:
  *   {
  *     "claude": {
  *       "model": "opus",
- *       "allowedTools": ["Read", "Write", "Edit"]
+ *       "allowedTools": ["Read", "Write", "Edit", "Bash"]
  *     }
  *   }
  *
@@ -26,10 +26,10 @@ const CONFIG_PATH = resolve(homedir(), '.bump-square', 'config.json');
 export interface ClaudeConfig {
   /** --model: sonnet (default), opus, haiku, or any string Claude Code accepts. */
   model: string;
-  /** --allowedTools (comma-joined for the CLI). Bash is included by default
-   * so the agent can run small node -e snippets to crunch geometry; remove if
-   * you want a stricter sandbox. The bump-layout skill itself enforces "only
-   * touch workspace.json", so tool perms are a safety net, not the boundary. */
+  /** --allowedTools (comma-joined for the CLI). Defaults to Read/Write/Edit —
+   * the bump-layout skill only needs to touch workspace.json. Add 'Bash' or
+   * other tools via config.json if you want a wider sandbox; this is the
+   * safety net, so widen it deliberately. */
   allowedTools: string[];
   /** --output-format. stream-json is required for the xterm streaming UI to
    * parse events; switching to 'text' will make the panel show raw text. */
@@ -37,9 +37,6 @@ export interface ClaudeConfig {
   /** --verbose. Required by stream-json; toggling off only makes sense if
    * outputFormat is 'text'. */
   verbose: boolean;
-  /** Escape hatch: extra CLI args appended verbatim, after every other flag.
-   * Use for one-offs your schema doesn't cover yet. */
-  extraArgs?: string[];
 }
 
 export interface BumpSquareConfig {
@@ -49,7 +46,7 @@ export interface BumpSquareConfig {
 const DEFAULTS: BumpSquareConfig = {
   claude: {
     model: 'sonnet',
-    allowedTools: ['Read', 'Write', 'Edit', 'Bash'],
+    allowedTools: ['Read', 'Write', 'Edit'],
     outputFormat: 'stream-json',
     verbose: true,
   },
@@ -80,6 +77,5 @@ export function claudeArgsFromConfig(cfg: ClaudeConfig): string[] {
     '--allowedTools', cfg.allowedTools.join(','),
   ];
   if (cfg.verbose) args.push('--verbose');
-  if (cfg.extraArgs?.length) args.push(...cfg.extraArgs);
   return args;
 }
