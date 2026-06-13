@@ -130,7 +130,19 @@ function canVisit(s: string): boolean {
 <template>
   <div class="h-screen flex flex-col bg-zinc-900 text-zinc-100">
     <header class="h-11 shrink-0 border-b border-zinc-800 flex items-center px-4 gap-4">
-      <span class="text-sm font-bold text-white">bump-square</span>
+      <!-- Brand lockup. Inert — breadcrumb owns step navigation.
+           Two-tone wordmark: "Square" picks up the lighter mark square's
+           violet so the SVG and the text read as one unit. -->
+      <div class="flex items-center gap-2 select-none">
+        <svg viewBox="0 0 128 128" class="w-5 h-5 shrink-0" aria-hidden="true">
+          <rect x="26" y="46" width="56" height="56" rx="14" fill="#a78bfa" />
+          <rect x="46" y="26" width="56" height="56" rx="14" fill="#7c3aed" />
+        </svg>
+        <span class="text-sm flex items-center">
+          <span class="font-medium text-zinc-100">Bump</span>
+          <span class="ml-1.5 font-semibold text-violet-400 border border-violet-400 rounded-md p-1 leading-none tracking-wider">SQUARE</span>
+        </span>
+      </div>
       <!-- Breadcrumb steps as chevron tabs: the triangular edge shows direction. -->
       <div class="flex items-center gap-0.5">
         <button
