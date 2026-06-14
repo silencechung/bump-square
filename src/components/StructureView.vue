@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { useWorkspaceStore } from '../stores/workspace';
+import { useWorkspaceStore } from '~src/stores/workspace';
 import { computed, ref } from 'vue';
 import MarkdownIt from 'markdown-it';
 import StructureTree from './StructureTree.vue';
 import AnnotationDot from './AnnotationDot.vue';
-import { treeToConsole } from '../lib/structureText';
+import { treeToConsole } from '~src/lib/structureText';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const store = useWorkspaceStore();
 
 // html:false escapes any raw HTML in the prompt (frame comments are semi-trusted
@@ -46,15 +48,17 @@ function resetPrompt() {
 const renderedPrompt = computed(() => md.render(effectivePrompt.value || ''));
 
 function copyHandoff() {
-  if (effectivePrompt.value) navigator.clipboard.writeText(effectivePrompt.value);
+  if (effectivePrompt.value) {
+    navigator.clipboard.writeText(effectivePrompt.value);
+  }
 }
 </script>
 
 <template>
   <div class="flex-1 flex flex-col overflow-hidden p-6 gap-4">
     <div class="relative flex items-center justify-between">
-      <h2 class="text-sm font-semibold text-zinc-300">Generated Structure</h2>
-      <span class="text-xs text-zinc-500">AI actions 在 header 右上角</span>
+      <h2 class="text-sm font-semibold text-zinc-300">{{ t('structure.heading') }}</h2>
+      <span class="text-xs text-zinc-500">{{ t('structure.hint') }}</span>
       <AnnotationDot area="structure-view" pos="-top-1 left-[148px]" />
     </div>
 
@@ -69,11 +73,11 @@ function copyHandoff() {
       <span class="i-lucide-triangle-alert text-amber-300 text-base mt-0.5 shrink-0" />
       <div class="flex-1 leading-snug">
         <div class="font-medium text-amber-200">
-          下面這份 spec 跟現在的 Frame 不一致
+          {{ t('structure.stale.headline') }}
         </div>
         <div class="text-xs text-amber-100/80 mt-0.5">
-          <span v-if="store.isPromptStale">結構 / Prompt 已過期 — 按 header 的「🧩 產生結構」重新產生。</span>
-          <span v-if="store.isAssetsPromptStale">Assets prompt 已過期 — 按「✨ 生成 assets prompt」重新產生。</span>
+          <span v-if="store.isPromptStale">{{ t('structure.stale.prompt') }}</span>
+          <span v-if="store.isAssetsPromptStale">{{ t('structure.stale.assets') }}</span>
         </div>
       </div>
     </div>
@@ -84,38 +88,38 @@ function copyHandoff() {
       <div class="flex items-center gap-2 mb-2">
         <div class="flex items-center gap-0.5 text-sm font-medium">
           <button
-            v-for="(t, i) in tabs"
-            :key="t.id"
+            v-for="(tab, i) in tabs"
+            :key="tab.id"
             class="px-6 py-2 transition-colors"
             :class="[
-              viewMode === t.id ? 'bg-violet-300 text-violet-950' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600',
+              viewMode === tab.id ? 'bg-violet-300 text-violet-950' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600',
               i === 0 ? 'rounded-l-full' : '',
               i === tabs.length - 1 ? 'rounded-r-full' : '',
             ]"
-            @click="viewMode = t.id"
-          >{{ t.label }}</button>
+            @click="viewMode = tab.id"
+          >{{ tab.label }}</button>
         </div>
         <div v-if="viewMode === 'prompt'" class="ml-auto flex items-center gap-3">
           <span v-if="isEdited" class="text-sm text-amber-400 flex items-center gap-1">
             <span class="i-lucide-pencil" />
-            <span>已編輯</span>
+            <span>{{ t('structure.edited') }}</span>
           </span>
           <button
             v-if="isEdited"
             class="text-sm px-4 py-1.5 btn-neutral"
             title="Discard edits, revert to the structure-derived prompt"
             @click="resetPrompt"
-          >重設</button>
+          >{{ t('structure.reset') }}</button>
           <!-- Preview (rendered md) ⟷ Source (editable) toggle -->
           <button
             type="button"
             role="switch"
             :aria-checked="promptView === 'source'"
             class="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-            title="切換：預覽（渲染）／原始碼（可編輯）"
+            :title="t('structure.toggleTitle')"
             @click="promptView = promptView === 'preview' ? 'source' : 'preview'"
           >
-            <span>原始碼</span>
+            <span>{{ t('structure.source') }}</span>
             <span
               class="relative w-11 h-6 rounded-full transition-colors"
               :class="promptView === 'source' ? 'bg-violet-400' : 'bg-zinc-600'"

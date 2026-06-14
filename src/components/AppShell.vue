@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref, watch } from 'vue';
-import { useWorkspaceStore } from '../stores/workspace';
+import { useWorkspaceStore } from '~src/stores/workspace';
 import UploadPanel from './UploadPanel.vue';
 import WorkspaceCanvas from './WorkspaceCanvas.vue';
 import AgentPanel from './AgentPanel.vue';
@@ -11,10 +11,22 @@ import TerminalPanel from './TerminalPanel.vue';
 import SkillInstallBanner from './SkillInstallBanner.vue';
 import AnnotationDot from './AnnotationDot.vue';
 import AnnotationOverlay from './AnnotationOverlay.vue';
-import { useAnnotations } from '../composables/useAnnotations';
+import { useAnnotations } from '~src/composables/useAnnotations';
+import { useT } from '~src/composables/useT';
+import type { Locale } from '~src/i18n';
+
+// Astro page passes the server-side locale here so SSR matches the persisted
+// preference. The SSE channel still wins once the socket is up; this is just
+// the seed value that prevents a "flash of default locale" on first paint.
+const props = defineProps<{ initialLocale?: Locale }>();
 
 const store = useWorkspaceStore();
+if (props.initialLocale) {
+  store.locale = props.initialLocale;
+}
 const { annotationMode, toggleMode } = useAnnotations();
+const t = useT();
+
 
 onMounted(() => {
   store.connect();
@@ -45,11 +57,11 @@ const stepLabels: Record<string, string> = {
   structure: 'Structure',
 };
 // Each step's purpose, surfaced as a tooltip so the nav isn't ambiguous.
-const stepTitles: Record<string, string> = {
-  upload: '① 上傳設計截圖',
-  layout: '② 畫框並標註每塊的意圖（comment）→ 產生意圖結構',
-  structure: '③ 檢視產生的意圖結構，送交開發 agent',
-};
+const stepTitles = computed<Record<string, string>>(() => ({
+  upload: t('header.step.upload'),
+  layout: t('header.step.layout'),
+  structure: t('header.step.structure'),
+}));
 
 const hasStructure = computed(() => !!store.structure.tree);
 const hasSquares = computed(() => store.squares.length > 0);
@@ -61,7 +73,9 @@ const busy = computed(() => store.runningKind !== null);
 const latestSave = computed(() => store.saves[0] ?? null);
 const copyFeedback = ref(false);
 async function copyLatestSavePath() {
-  if (!latestSave.value) return;
+  if (!latestSave.value) {
+    return;
+  }
   try {
     await navigator.clipboard.writeText(latestSave.value.path);
     copyFeedback.value = true;
@@ -75,17 +89,17 @@ async function copyLatestSavePath() {
 const aiActions = computed(() => [
   {
     kind: 'generate-structure',
-    label: '產生結構',
-    runningLabel: '產生中…',
+    label: t('header.ai.structure.label'),
+    runningLabel: t('header.ai.structure.running'),
     canRun: hasSquares.value,
-    why: hasSquares.value ? '依 Frame + comment 產生意圖結構樹' : '先在 Layout 畫至少一個 Frame',
+    why: hasSquares.value ? t('header.ai.structure.why') : t('header.ai.structure.gate'),
   },
   {
     kind: 'suggest-assets',
-    label: 'Assets',
-    runningLabel: '生成中…',
+    label: t('header.ai.assets.label'),
+    runningLabel: t('header.ai.assets.running'),
     canRun: hasStructure.value,
-    why: hasStructure.value ? '由 agent 依結構推敲視覺素材' : '先產生結構',
+    why: hasStructure.value ? t('header.ai.assets.why') : t('header.ai.assets.gate'),
   },
 ]);
 
@@ -125,8 +139,12 @@ function onResetClick() {
 }
 
 function canVisit(s: string): boolean {
-  if (s === 'upload') return true;
-  if (s === 'structure') return hasStructure.value;
+  if (s === 'upload') {
+    return true;
+  }
+  if (s === 'structure') {
+    return hasStructure.value;
+  }
   return !!store.sourceImage;
 }
 </script>
@@ -185,20 +203,22 @@ function canVisit(s: string): boolean {
             }"
             :disabled="!latestSave"
             :title="latestSave
-              ? (copyFeedback ? '已複製到剪貼簿！' : `複製最新 save 路徑（${latestSave.name}）給下游 reader skill`)
-              : '尚無 save — 先在「存檔」menu 存一份'"
+              ? (copyFeedback ? t('header.copy.tipDone') : `${t('header.copy.tipPrefix')}${latestSave.name}${t('header.copy.tipSuffix')}`)
+              : t('header.copy.tipEmpty')"
             @click="copyLatestSavePath"
           >
             <span :class="copyFeedback ? 'i-lucide-clipboard-check' : 'i-lucide-clipboard'" />
-            <span>{{ copyFeedback ? '已複製' : '複製路徑' }}</span>
+            <span>{{ copyFeedback ? t('header.copy.done') : t('header.copy.action') }}</span>
           </button>
           <AnnotationDot area="save-cluster" pos="-top-1 -right-1" />
         </div>
 
         <!-- AI actions cluster — every button here calls `claude --print`.
              Unified violet→cyan gradient + sparkle prefix marks them as AI-driven.
-             Each spins only when its own kind is in flight (no more linkage). -->
-        <div class="relative flex items-center gap-1 pl-3 border-l border-zinc-700">
+             Each spins only when its own kind is in flight (no more linkage).
+             gap-2 matches the Saves cluster's button rhythm so the header reads
+             as one consistent grid rather than two competing tempos. -->
+        <div class="relative flex items-center gap-2 pl-3 border-l border-zinc-700">
           <span class="text-[10px] text-zinc-500 uppercase tracking-wider pr-1">AI</span>
           <button
             v-for="a in aiActions"
@@ -210,9 +230,9 @@ function canVisit(s: string): boolean {
             }"
             :disabled="!a.canRun || busy"
             :title="store.runningKind === a.kind
-              ? `Claude 正在執行 ${a.kind}…`
+              ? `${t('header.ai.runningPrefix')}${a.kind}${t('header.ai.runningSuffix')}`
               : busy
-                ? '另一個 AI action 進行中，請稍候'
+                ? t('header.ai.busyOther')
                 : a.why"
             @click="store.runClaude(a.kind)"
           >
@@ -234,30 +254,42 @@ function canVisit(s: string): boolean {
             :class="confirmingReset
               ? 'bg-red-500 text-white hover:bg-red-400'
               : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-red-400'"
-            :title="confirmingReset ? '再按一次確認清空整個板面' : '清空整個板面（不可復原；undo/redo 也會清掉）'"
+            :title="confirmingReset ? t('header.reset.armedTitle') : t('header.reset.idleTitle')"
             @click="onResetClick"
           >
             <span class="i-lucide-trash-2" />
-            <span>{{ confirmingReset ? '確定清空？' : 'Reset' }}</span>
+            <span>{{ confirmingReset ? t('header.reset.armedLabel') : t('header.reset.idleLabel') }}</span>
           </button>
           <AnnotationDot area="reset" pos="-top-1 -right-1" />
         </div>
 
-        <!-- Annotation toggle. Sits at the far right after Reset — meta /
-             passive (just toggles UI annotations on/off, no destructive
-             action), so it's safe next to Reset. Pulses violet when on to
-             telegraph "hint mode active". -->
-        <button
-          type="button"
-          class="text-zinc-400 hover:text-violet-300 transition-colors flex items-center justify-center w-7 h-7 rounded-full ml-1"
-          :class="annotationMode ? 'text-violet-300 bg-violet-500/15 shadow-[0_0_10px_-2px_rgba(167,139,250,0.6)]' : ''"
-          :title="annotationMode ? '關閉功能說明' : '開啟功能說明 — 在每個功能旁顯示可點 dot'"
-          aria-label="toggle annotation mode"
-          :aria-pressed="annotationMode"
-          @click="toggleMode"
-        >
+        <!-- Meta cluster: locale toggle + annotation toggle. Wrapped in the
+             same bordered shell as Reset / AI clusters so the header reads
+             as 4 evenly-separated groups, not "3 clusters + 2 hanging icons".
+             CJK '繁' needs more optical size than latin 'Reset' next to it
+             (CJK glyphs read smaller at the same px), so text-sm + min-w-8. -->
+        <div class="relative flex items-center gap-1 pl-3 border-l border-zinc-700">
+          <button
+            type="button"
+            class="text-zinc-300 hover:text-violet-300 transition-colors flex items-center justify-center h-7 min-w-8 px-2 rounded-full text-sm font-medium tracking-wide tabular-nums"
+            :title="store.locale === 'zh-TW' ? t('header.locale.toEn') : t('header.locale.toZh')"
+            aria-label="toggle locale"
+            @click="store.toggleLocale()"
+          >
+            {{ store.locale === 'zh-TW' ? '繁' : 'EN' }}
+          </button>
+          <button
+            type="button"
+            class="text-zinc-400 hover:text-violet-300 transition-colors flex items-center justify-center w-7 h-7 rounded-full"
+            :class="annotationMode ? 'text-violet-300 bg-violet-500/15 shadow-[0_0_10px_-2px_rgba(167,139,250,0.6)]' : ''"
+            :title="annotationMode ? t('header.annotation.on') : t('header.annotation.off')"
+            aria-label="toggle annotation mode"
+            :aria-pressed="annotationMode"
+            @click="toggleMode"
+          >
           <span class="i-lucide-help-circle text-base" />
         </button>
+        </div>
       </div>
     </header>
 
@@ -288,7 +320,7 @@ function canVisit(s: string): boolean {
       <button
         class="status-toggle"
         :class="{ 'status-toggle-open': terminalOpen, 'status-toggle-busy': busy }"
-        :title="`切換 claude --print 終端機面板（Ctrl+\`）`"
+        :title="t('header.terminal.toggle')"
         @click="terminalOpen = !terminalOpen"
       >
         <span class="i-lucide-terminal" />

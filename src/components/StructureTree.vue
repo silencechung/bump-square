@@ -8,10 +8,12 @@
  * The component references itself by name in its own template (Vue resolves a
  * SFC's own filename), which is what makes the recursion work.
  */
-import type { StructureNode } from '../types';
-import { useWorkspaceStore } from '../stores/workspace';
+import type { StructureNode } from '~src/types';
+import { useWorkspaceStore } from '~src/stores/workspace';
 import { ref, computed } from 'vue';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const props = defineProps<{ node: StructureNode; root?: boolean }>();
 const store = useWorkspaceStore();
 
@@ -19,7 +21,9 @@ const collapsed = ref(false);
 const hasChildren = computed(() => !!(props.node.children && props.node.children.length));
 
 function focusFrame() {
-  if (!props.node.squareId) return;
+  if (!props.node.squareId) {
+    return;
+  }
   store.selectedSquareId = props.node.squareId;
   store.step = 'layout';
 }
@@ -41,7 +45,7 @@ function focusFrame() {
           v-if="hasChildren"
           type="button"
           class="w-7 h-7 flex items-center justify-center rounded-full border border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-violet-500 hover:border-violet-500 hover:text-white text-base font-medium leading-none transition-colors"
-          :title="collapsed ? '展開' : '收合'"
+          :title="collapsed ? t('tree.expand') : t('tree.collapse')"
           @click.stop="collapsed = !collapsed"
         >{{ collapsed ? '+' : '−' }}</button>
         <span v-else class="mt-2.5 w-2 h-2 rounded-full bg-violet-400"></span>

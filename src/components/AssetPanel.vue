@@ -16,7 +16,9 @@ const typeColors: Record<string, string> = {
 /** Crop the source image to the asset's bounding box via CSS background. */
 function cropStyle(asset: Asset): Record<string, string> {
   const img = store.sourceImage;
-  if (!img || !asset.width || !asset.height) return {};
+  if (!img || !asset.width || !asset.height) {
+    return {};
+  }
   const box = 40;
   const scale = Math.min(box / asset.width, box / asset.height);
   return {

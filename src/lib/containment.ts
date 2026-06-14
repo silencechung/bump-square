@@ -27,7 +27,9 @@ export interface ContainmentNode {
 const OVERLAP_THRESHOLD = 0.85;
 
 export function isContainedIn(inner: Square, outer: Square): boolean {
-  if (inner.id === outer.id) return false;
+  if (inner.id === outer.id) {
+    return false;
+  }
   // --- default implementation (replace with your preferred strategy) ---
   const ix = Math.max(inner.x, outer.x);
   const iy = Math.max(inner.y, outer.y);
@@ -35,7 +37,9 @@ export function isContainedIn(inner: Square, outer: Square): boolean {
   const iy2 = Math.min(inner.y + inner.height, outer.y + outer.height);
   const interArea = Math.max(0, ix2 - ix) * Math.max(0, iy2 - iy);
   const innerArea = inner.width * inner.height;
-  if (innerArea <= 0) return false;
+  if (innerArea <= 0) {
+    return false;
+  }
   return interArea / innerArea >= OVERLAP_THRESHOLD;
 }
 
@@ -50,7 +54,9 @@ export function computeContainment(squares: Square[]): ContainmentNode[] {
   for (const inner of squares) {
     let bestParent: Square | null = null;
     for (const outer of squares) {
-      if (!isContainedIn(inner, outer)) continue;
+      if (!isContainedIn(inner, outer)) {
+        continue;
+      }
       const outerArea = outer.width * outer.height;
       if (!bestParent || outerArea < bestParent.width * bestParent.height) {
         bestParent = outer;
@@ -67,8 +73,12 @@ export function computeContainment(squares: Square[]): ContainmentNode[] {
   for (const sq of squares) {
     const parentId = parentOf.get(sq.id);
     const node = nodes.get(sq.id)!;
-    if (parentId) nodes.get(parentId)!.children.push(node);
-    else roots.push(node);
+    if (parentId) {
+      nodes.get(parentId)!.children.push(node);
+    }
+    else {
+      roots.push(node);
+    }
   }
 
   return roots;

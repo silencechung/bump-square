@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { useWorkspaceStore } from '../stores/workspace';
-import type { Square } from '../types';
-import { useViewport } from '../composables/useViewport';
-import { useNotesRail } from '../composables/useNotesRail';
-import { useFrameInteractions } from '../composables/useFrameInteractions';
+import { useWorkspaceStore } from '~src/stores/workspace';
+import type { Square } from '~src/types';
+import { useViewport } from '~src/composables/useViewport';
+import { useNotesRail } from '~src/composables/useNotesRail';
+import { useFrameInteractions } from '~src/composables/useFrameInteractions';
+import { useT } from '~src/composables/useT';
 import AnnotationDot from './AnnotationDot.vue';
 
+const t = useT();
 const store = useWorkspaceStore();
 const containerRef = ref<HTMLDivElement | null>(null);
 
@@ -58,7 +60,9 @@ function onKeyDown(e: KeyboardEvent) {
     fit();
     return;
   }
-  if (isTyping(e)) return;                    // don't hijack keys while typing
+  if (isTyping(e)) {
+    return;                    // don't hijack keys while typing
+  }
   // Undo / redo / clipboard (Ctrl on Win/Linux, ⌘ on macOS).
   if (e.ctrlKey || e.metaKey) {
     const k = e.key.toLowerCase();
@@ -76,7 +80,9 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 function onKeyUp(e: KeyboardEvent) {
-  if (e.code === 'Space') spaceDown.value = false;
+  if (e.code === 'Space') {
+    spaceDown.value = false;
+  }
 }
 function isTyping(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
@@ -84,7 +90,9 @@ function isTyping(e: KeyboardEvent) {
 }
 
 watch(() => store.step, step => {
-  if (step === 'layout') drawMode.value = false;
+  if (step === 'layout') {
+    drawMode.value = false;
+  }
 });
 
 function onWheel(e: WheelEvent) {
@@ -100,7 +108,9 @@ function onSquareDragOver(e: DragEvent, squareId: string) {
 function onSquareDrop(e: DragEvent, squareId: string) {
   e.preventDefault();
   const assetId = e.dataTransfer?.getData('assetId');
-  if (assetId) store.placeAssetInSquare(assetId, squareId);
+  if (assetId) {
+    store.placeAssetInSquare(assetId, squareId);
+  }
 }
 
 function selectSquare(id: string) {
@@ -161,8 +171,12 @@ function commentDisplay(sq: Square): CommentDisplay {
   // While renaming THIS frame, don't open its comment editor: two autofocus
   // fields (name input + comment textarea, both v-focus) would fight for focus
   // and the name input would blur → commit → the rename closes instantly.
-  if (store.selectedSquareId === sq.id && editingLabelId.value !== sq.id) return 'editing';
-  if (sq.comment && sq.comment.trim()) return 'card';
+  if (store.selectedSquareId === sq.id && editingLabelId.value !== sq.id) {
+    return 'editing';
+  }
+  if (sq.comment && sq.comment.trim()) {
+    return 'card';
+  }
   return 'hint';
 }
 
@@ -173,7 +187,9 @@ function hasAiNote(sq: Square) {
   return !!(sq.aiNote && sq.aiNote.trim());
 }
 function acceptAiNote(sq: Square) {
-  if (!sq.aiNote) return;
+  if (!sq.aiNote) {
+    return;
+  }
   store.updateSquare(sq.id, { comment: sq.aiNote, aiNote: '' });
 }
 function dismissAiNote(sq: Square) {
@@ -210,7 +226,7 @@ const {
           <button
             class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
             role="switch" :aria-checked="drawMode"
-            :title="drawMode ? '退出 Frame mode(回到 Hand)' : '進入 Frame mode:拖曳空白處畫新 frame,Ctrl + 拖曳 frame 才能移動'"
+            :title="drawMode ? t('canvas.frame.exit') : t('canvas.frame.enter')"
             @click="toggleDraw"
           >
             <span :class="drawMode ? 'i-lucide-square' : 'i-lucide-hand'" />
@@ -226,7 +242,7 @@ const {
         <div class="flex items-center gap-1 ml-2">
           <button
             class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
-            title="復原 (Ctrl+Z)"
+            :title="t('canvas.undo')"
             :disabled="!store.canUndo"
             @click="store.undo()"
           >
@@ -234,7 +250,7 @@ const {
           </button>
           <button
             class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
-            title="重做 (Ctrl+Shift+Z / Ctrl+Y)"
+            :title="t('canvas.redo')"
             :disabled="!store.canRedo"
             @click="store.redo()"
           >
@@ -278,7 +294,7 @@ const {
       <div
         v-if="placing"
         class="absolute top-3 left-1/2 -translate-x-1/2 z-50 text-sm px-4 py-1.5 rounded-full bg-violet-400 text-violet-950 font-medium shadow-lg pointer-events-none"
-      >點擊放置{{ clipboard?.cut ? '（剪下）' : '' }} · Esc 取消</div>
+      >{{ t('canvas.place.hint') }}{{ clipboard?.cut ? t('canvas.place.cut') : '' }} · {{ t('canvas.place.cancel') }}</div>
 
       <!-- Source image as the canvas backdrop (image space, transformed) -->
       <img
@@ -427,7 +443,7 @@ const {
             <button
               v-if="editingLabelId !== sq.id"
               class="w-8 h-8 rounded-md flex items-center justify-center text-zinc-400 hover:text-violet-300 hover:bg-zinc-700 transition-colors"
-              title="Duplicate frame (含內部 frames)"
+              :title="t('canvas.frame.dup')"
               aria-label="Duplicate frame"
               @click.stop="store.duplicateFrame(sq.id)"
             >
@@ -455,20 +471,20 @@ const {
           <div class="flex items-center gap-1 mb-0.5">
             <span class="text-xs uppercase tracking-wide text-fuchsia-300/80 flex items-center gap-1">
               <span class="i-lucide-bot" />
-              <span>AI 推斷</span>
+              <span>{{ t('canvas.ai.label') }}</span>
             </span>
             <span class="ml-auto flex items-center gap-1.5">
               <button
                 class="text-xs text-violet-300 hover:text-violet-100 transition-colors flex items-center gap-1"
-                title="採用為我的註解"
+                :title="t('canvas.ai.adoptTitle')"
                 @click.stop="acceptAiNote(sq)"
               >
                 <span class="i-lucide-check" />
-                <span>採用</span>
+                <span>{{ t('canvas.ai.adopt') }}</span>
               </button>
               <button
                 class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                title="略過這個推斷"
+                :title="t('canvas.ai.dismissTitle')"
                 @click.stop="dismissAiNote(sq)"
               >
                 <span class="i-lucide-x" />

@@ -17,21 +17,31 @@ const buffer: string[] = g.__bumpClaudeBuffer ?? (g.__bumpClaudeBuffer = []);
 const bus: EventEmitter = g.__bumpClaudeBus ?? (g.__bumpClaudeBus = new EventEmitter());
 bus.setMaxListeners(100);
 
-if (g.__bumpClaudeRunning === undefined) g.__bumpClaudeRunning = false;
-if (g.__bumpClaudeRunningKind === undefined) g.__bumpClaudeRunningKind = null;
-if (!g.__bumpClaudeQueue) g.__bumpClaudeQueue = [];
+if (g.__bumpClaudeRunning === undefined) {
+  g.__bumpClaudeRunning = false;
+}
+if (g.__bumpClaudeRunningKind === undefined) {
+  g.__bumpClaudeRunningKind = null;
+}
+if (!g.__bumpClaudeQueue) {
+  g.__bumpClaudeQueue = [];
+}
 
 const queue: Array<() => void> = g.__bumpClaudeQueue;
 
 function pushChunk(chunk: string) {
   const lines = chunk.split('\n');
   buffer.push(...lines);
-  if (buffer.length > MAX_BUFFER_LINES) buffer.splice(0, buffer.length - MAX_BUFFER_LINES);
+  if (buffer.length > MAX_BUFFER_LINES) {
+    buffer.splice(0, buffer.length - MAX_BUFFER_LINES);
+  }
   bus.emit('chunk', chunk);
 }
 
 function runNext() {
-  if (g.__bumpClaudeRunning || queue.length === 0) return;
+  if (g.__bumpClaudeRunning || queue.length === 0) {
+    return;
+  }
   const next = queue.shift()!;
   next();
 }
@@ -85,9 +95,15 @@ function formatStreamEvent(line: string): string | null {
   const subtype = ev.subtype as string | undefined;
 
   if (type === 'system') {
-    if (subtype?.startsWith('hook_')) return null;
-    if (subtype === 'init') return `\x1b[90m· session 就緒\x1b[0m\r\n`;
-    if (subtype === 'status') return null;
+    if (subtype?.startsWith('hook_')) {
+      return null;
+    }
+    if (subtype === 'init') {
+      return `\x1b[90m· session 就緒\x1b[0m\r\n`;
+    }
+    if (subtype === 'status') {
+      return null;
+    }
     return null;
   }
 
@@ -114,7 +130,9 @@ function formatStreamEvent(line: string): string | null {
     // it's actionable (and obvious whether the agent recovered or not).
     const message = ev.message as { content?: Array<Record<string, unknown>> } | undefined;
     const errBlock = message?.content?.find(b => b.is_error);
-    if (!errBlock) return null;
+    if (!errBlock) {
+      return null;
+    }
     const raw = typeof errBlock.content === 'string'
       ? errBlock.content
       : Array.isArray(errBlock.content)
@@ -173,7 +191,9 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
         const lines = stdoutBuf.split('\n');
         stdoutBuf = lines.pop() ?? '';
         for (const line of lines) {
-          if (!line.trim()) continue;
+          if (!line.trim()) {
+            continue;
+          }
           if (!initShown) {
             try {
               const ev = JSON.parse(line) as { type?: string; subtype?: string };
@@ -208,7 +228,9 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
             }
           } catch { /* ignore */ }
           const out = formatStreamEvent(line);
-          if (out) pushChunk(out);
+          if (out) {
+            pushChunk(out);
+          }
         }
       });
       child.stderr.on('data', (data: Buffer) => pushChunk(`\x1b[31m${data.toString()}\x1b[0m`));

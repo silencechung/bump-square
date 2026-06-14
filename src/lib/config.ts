@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n';
 
 /**
  * User-overridable runtime config for bump-square.
@@ -39,8 +40,15 @@ export interface ClaudeConfig {
   verbose: boolean;
 }
 
+export interface UiConfig {
+  /** UI language. The locale toggle in the header writes this back via
+   * /api/state setLocale; agent flow doesn't read it. */
+  locale: Locale;
+}
+
 export interface BumpSquareConfig {
   claude: ClaudeConfig;
+  ui: UiConfig;
 }
 
 const DEFAULTS: BumpSquareConfig = {
@@ -50,22 +58,48 @@ const DEFAULTS: BumpSquareConfig = {
     outputFormat: 'stream-json',
     verbose: true,
   },
+  ui: {
+    locale: DEFAULT_LOCALE,
+  },
 };
 
 /** Read config.json if present and merge over defaults. Never throws — a bad
  * config file falls back to defaults so the app keeps working. */
 export function loadConfig(): BumpSquareConfig {
-  if (!existsSync(CONFIG_PATH)) return DEFAULTS;
+  if (!existsSync(CONFIG_PATH)) {
+    return DEFAULTS;
+  }
   try {
     const raw = readFileSync(CONFIG_PATH, 'utf8');
     const user = JSON.parse(raw) as Partial<BumpSquareConfig>;
     return {
       claude: { ...DEFAULTS.claude, ...(user.claude ?? {}) },
+      ui: { ...DEFAULTS.ui, ...(user.ui ?? {}) },
     };
   } catch (err) {
     console.error('[bump-square] Failed to read config.json, using defaults:', err);
     return DEFAULTS;
   }
+}
+
+/** Persist a locale change to config.json. Read-modify-write keeps any
+ * unrelated user overrides intact (e.g. claude.model). Atomic-ish: writes
+ * to tmp + rename so a crash mid-write can't leave a half-file. */
+export function saveLocale(locale: Locale): void {
+  if (!isLocale(locale)) {
+    throw new Error(`Invalid locale: ${String(locale)}`);
+  }
+  let current: Partial<BumpSquareConfig> = {};
+  if (existsSync(CONFIG_PATH)) {
+    try {
+      current = JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) as Partial<BumpSquareConfig>;
+    } catch { /* corrupt file — overwrite with just our field */ }
+  }
+  const next = { ...current, ui: { ...(current.ui ?? {}), locale } };
+  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+  const tmp = `${CONFIG_PATH}.tmp`;
+  writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
+  renameSync(tmp, CONFIG_PATH);
 }
 
 /** Translate a ClaudeConfig into the argv array passed to `spawn('claude', ...)`.
@@ -76,6 +110,8 @@ export function claudeArgsFromConfig(cfg: ClaudeConfig): string[] {
     '--output-format', cfg.outputFormat,
     '--allowedTools', cfg.allowedTools.join(','),
   ];
-  if (cfg.verbose) args.push('--verbose');
+  if (cfg.verbose) {
+    args.push('--verbose');
+  }
   return args;
 }

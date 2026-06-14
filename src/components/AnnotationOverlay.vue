@@ -1,26 +1,34 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
-import { useAnnotations } from '../composables/useAnnotations';
+import { useAnnotations } from '~src/composables/useAnnotations';
+import { useT } from '~src/composables/useT';
+import { useWorkspaceStore } from '~src/stores/workspace';
+import { DEFAULT_LOCALE } from '~src/i18n';
 
-// Compile every help/*.md into the bundle at build time. When task #3 (i18n)
-// lands, restructure as help/<locale>/*.md and resolve by locale here — the
-// API surface above does not change.
-const helpModules = import.meta.glob('../content/help/*.md', {
+// Compile every help/<locale>/*.md into the bundle at build time, keyed as
+// helpByLocale[locale][area]. Missing-locale lookups fall back to zh-TW so
+// adding a new locale doesn't require translating every file up front.
+const helpModules = import.meta.glob('../content/help/**/*.md', {
   eager: true,
   query: '?raw',
   import: 'default',
 }) as Record<string, string>;
 
-const helpByArea: Record<string, string> = {};
+const helpByLocale: Record<string, Record<string, string>> = {};
 for (const path of Object.keys(helpModules)) {
-  const name = path.split('/').pop()!.replace(/\.md$/, '');
-  helpByArea[name] = helpModules[path];
+  const parts = path.split('/');
+  const file = parts.pop()!;
+  const locale = parts.pop()!;
+  const area = file.replace(/\.md$/, '');
+  (helpByLocale[locale] ??= {})[area] = helpModules[path];
 }
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
 const { activeArea, close } = useAnnotations();
+const store = useWorkspaceStore();
+const t = useT();
 
 // Anchor rect of the dot whose area is active. Refreshed on resize/scroll/
 // activeArea change so the popover follows panel resizes or canvas zoom.
@@ -33,9 +41,12 @@ const rect = ref<DOMRect | null>(null);
 const viewport = ref({ w: 0, h: 0 });
 
 const html = computed(() => {
-  if (!activeArea.value) return '';
-  const raw = helpByArea[activeArea.value];
-  return raw ? md.render(raw) : '<p>(說明缺失)</p>';
+  if (!activeArea.value) {
+    return '';
+  }
+  const area = activeArea.value;
+  const raw = helpByLocale[store.locale]?.[area] ?? helpByLocale[DEFAULT_LOCALE]?.[area];
+  return raw ? md.render(raw) : `<p>${t('annotation.missing')}</p>`;
 });
 
 function updateRect() {
@@ -55,13 +66,19 @@ function onResize() {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && activeArea.value) close();
+  if (e.key === 'Escape' && activeArea.value) {
+    close();
+  }
 }
 
 function onClickOutside(e: MouseEvent) {
-  if (!activeArea.value) return;
+  if (!activeArea.value) {
+    return;
+  }
   const t = e.target as HTMLElement;
-  if (t.closest('.annotation-popover, [data-annotation-area]')) return;
+  if (t.closest('.annotation-popover, [data-annotation-area]')) {
+    return;
+  }
   close();
 }
 
@@ -81,8 +98,12 @@ function detachActiveListeners() {
 }
 
 watch(activeArea, async (newVal, oldVal) => {
-  if (newVal && !oldVal) attachActiveListeners();
-  else if (!newVal && oldVal) detachActiveListeners();
+  if (newVal && !oldVal) {
+    attachActiveListeners();
+  }
+  else if (!newVal && oldVal) {
+    detachActiveListeners();
+  }
   await nextTick();
   updateRect();
 });
@@ -106,7 +127,9 @@ const MARGIN = 12;
 // actual popover max-height (60vh) instead of a hardcoded 200px so tall
 // content flips above when it should.
 const style = computed(() => {
-  if (!rect.value || viewport.value.h === 0) return { display: 'none' as const };
+  if (!rect.value || viewport.value.h === 0) {
+    return { display: 'none' as const };
+  }
   const r = rect.value;
   const v = viewport.value;
   const maxH = v.h * POPOVER_MAX_VH;

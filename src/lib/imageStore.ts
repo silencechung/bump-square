@@ -41,7 +41,9 @@ export function saveImage(base64Data: string, mediaType: string): StoredImage {
 export function readImageBase64(filename: string): string | null {
   const safe = basename(filename); // guard against path traversal
   const path = resolve(UPLOAD_DIR, safe);
-  if (!existsSync(path)) return null;
+  if (!existsSync(path)) {
+    return null;
+  }
   return readFileSync(path).toString('base64');
 }
 
@@ -49,14 +51,18 @@ export function readImageBase64(filename: string): string | null {
 export function readImageBytes(filename: string): Buffer | null {
   const safe = basename(filename);
   const path = resolve(UPLOAD_DIR, safe);
-  if (!existsSync(path)) return null;
+  if (!existsSync(path)) {
+    return null;
+  }
   return readFileSync(path);
 }
 
 /** Remove every stored image except the ones still referenced. Call after a new
  * upload to avoid accumulating orphaned files. */
 export function pruneImages(keepFilenames: string[]) {
-  if (!existsSync(UPLOAD_DIR)) return;
+  if (!existsSync(UPLOAD_DIR)) {
+    return;
+  }
   const keep = new Set(keepFilenames);
   for (const f of readdirSync(UPLOAD_DIR)) {
     if (!keep.has(f)) {

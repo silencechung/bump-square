@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useAnnotations, type HelpArea } from '../composables/useAnnotations';
+import { useAnnotations, type HelpArea } from '~src/composables/useAnnotations';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const props = defineProps<{
   area: HelpArea;
   /** Tailwind/UnoCSS positioning override — defaults to top-right corner of
@@ -18,7 +20,9 @@ const { annotationMode, activeArea, open } = useAnnotations();
  * delay; doesn't move the dot or change layout. */
 const animationDelay = computed(() => {
   let h = 0;
-  for (let i = 0; i < props.area.length; i++) h = (h * 31 + props.area.charCodeAt(i)) | 0;
+  for (let i = 0; i < props.area.length; i++) {
+    h = (h * 31 + props.area.charCodeAt(i)) | 0;
+  }
   return `${((h % 8) + 8) % 8 * 100}ms`;
 });
 </script>
@@ -28,7 +32,7 @@ const animationDelay = computed(() => {
     v-if="annotationMode"
     type="button"
     :data-annotation-area="area"
-    :aria-label="`說明:${area}`"
+    :aria-label="`${t('annotation.dotLabel')}${area}`"
     :style="{ animationDelay }"
     :class="[
       'annotation-dot absolute z-30 w-2.5 h-2.5 rounded-full',

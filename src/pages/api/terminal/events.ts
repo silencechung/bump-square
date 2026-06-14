@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getTerminalBuffer, subscribeTerminal, subscribeTerminalClear, subscribeRunning, runningKind } from '../../../lib/claudeRunner';
+import { getTerminalBuffer, subscribeTerminal, subscribeTerminalClear, subscribeRunning, runningKind } from '~src/lib/claudeRunner';
 
 export const prerender = false;
 
@@ -32,7 +32,9 @@ export const GET: APIRoute = async () => {
 
       // Replay history
       const history = getTerminalBuffer().join('\n');
-      if (history) sendChunk(history);
+      if (history) {
+        sendChunk(history);
+      }
 
       unsubChunk = subscribeTerminal(sendChunk);
       unsubClear = subscribeTerminalClear(sendClear);
@@ -43,7 +45,9 @@ export const GET: APIRoute = async () => {
       unsubChunk?.();
       unsubClear?.();
       unsubRunning?.();
-      if (heartbeat) clearInterval(heartbeat);
+      if (heartbeat) {
+        clearInterval(heartbeat);
+      }
     },
   });
 

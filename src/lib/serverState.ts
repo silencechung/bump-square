@@ -4,6 +4,8 @@ import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { v4 as uuid } from 'uuid';
 import type { Asset, Square, StructureNode } from '../types';
+import type { Locale } from '../i18n';
+import { loadConfig, saveLocale } from './config';
 
 /**
  * Single source of truth for the live workspace, held in module scope so it
@@ -80,7 +82,9 @@ const SAVE_DEBOUNCE_MS = 400;
 
 function loadFromDisk(): WorkspaceState | null {
   try {
-    if (!existsSync(SAVE_PATH)) return null;
+    if (!existsSync(SAVE_PATH)) {
+      return null;
+    }
     const raw = readFileSync(SAVE_PATH, 'utf8');
     const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
     // Merge onto a fresh empty state so missing/new fields stay well-formed.
@@ -102,6 +106,7 @@ const g = globalThis as unknown as {
   __bumpSquareSaveTimer?: ReturnType<typeof setTimeout>;
   __bumpSquareUndo?: BoardSnapshot[];
   __bumpSquareRedo?: BoardSnapshot[];
+  __bumpSquareLocale?: Locale;
 };
 
 const state: WorkspaceState = g.__bumpSquareState ?? (g.__bumpSquareState = loadFromDisk() ?? emptyState());
@@ -129,7 +134,9 @@ let _suppressWatch = false;
 /** Debounced atomic write: serialize to a temp file then rename, so a crash
  * mid-write can never leave a half-written workspace.json. */
 function scheduleSave() {
-  if (g.__bumpSquareSaveTimer) clearTimeout(g.__bumpSquareSaveTimer);
+  if (g.__bumpSquareSaveTimer) {
+    clearTimeout(g.__bumpSquareSaveTimer);
+  }
   g.__bumpSquareSaveTimer = setTimeout(() => {
     try {
       mkdirSync(dirname(SAVE_PATH), { recursive: true });
@@ -156,7 +163,9 @@ scheduleSave();
   try {
     mkdirSync(dir, { recursive: true });
     watch(dir, (_, filename) => {
-      if (filename !== 'workspace.json' || _suppressWatch) return;
+      if (filename !== 'workspace.json' || _suppressWatch) {
+        return;
+      }
       try {
         const raw = readFileSync(SAVE_PATH, 'utf8');
         const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
@@ -200,12 +209,16 @@ export function mutate(
 ): WorkspaceState {
   if (opts.history !== false) {
     undoStack.push(snapshotBoard(state));
-    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    if (undoStack.length > HISTORY_LIMIT) {
+      undoStack.shift();
+    }
     redoStack.length = 0;
   }
   fn(state);
   const shouldBump = opts.bumpVersion ?? (opts.history !== false);
-  if (shouldBump) state.boardVersion = Date.now();
+  if (shouldBump) {
+    state.boardVersion = Date.now();
+  }
   bus.emit('change', state);
   scheduleSave();
   return state;
@@ -216,8 +229,12 @@ export function mutate(
  * board edit itself (no history, no boardVersion bump). */
 export function stampStructureVersion(field: 'prompt' | 'assets', version: number | null) {
   mutate(s => {
-    if (field === 'prompt') s.structure.promptVersion = version;
-    else s.structure.assetsPromptVersion = version;
+    if (field === 'prompt') {
+      s.structure.promptVersion = version;
+    }
+    else {
+      s.structure.assetsPromptVersion = version;
+    }
   }, { history: false, bumpVersion: false });
 }
 
@@ -229,7 +246,9 @@ export function canRedo(): boolean { return redoStack.length > 0; }
  * boardVersion explicitly (default tracks `history`, which would say "no"). */
 export function undo(): boolean {
   const prev = undoStack.pop();
-  if (!prev) return false;
+  if (!prev) {
+    return false;
+  }
   redoStack.push(snapshotBoard(state));
   mutate(s => Object.assign(s, prev), { history: false, bumpVersion: true });
   return true;
@@ -238,7 +257,9 @@ export function undo(): boolean {
 /** Re-apply the last undone board snapshot. Returns false if nothing to redo. */
 export function redo(): boolean {
   const next = redoStack.pop();
-  if (!next) return false;
+  if (!next) {
+    return false;
+  }
   undoStack.push(snapshotBoard(state));
   mutate(s => Object.assign(s, next), { history: false, bumpVersion: true });
   return true;
@@ -247,6 +268,28 @@ export function redo(): boolean {
 export function onChange(listener: (s: WorkspaceState) => void): () => void {
   bus.on('change', listener);
   return () => bus.off('change', listener);
+}
+
+// --- UI locale ---
+// Locale is a UI preference, not board state — kept module-scoped (not in
+// WorkspaceState / workspace.json) so loading a named save doesn't yank the
+// user's language preference around. Persisted in ~/.bump-square/config.json,
+// broadcast through the same SSE bus as board changes so all open tabs sync.
+let currentLocale: Locale = g.__bumpSquareLocale ?? (g.__bumpSquareLocale = loadConfig().ui.locale);
+
+export function getLocale(): Locale {
+  return currentLocale;
+}
+
+export function setLocale(next: Locale): void {
+  if (next === currentLocale) {
+    return;
+  }
+  saveLocale(next);
+  currentLocale = next;
+  g.__bumpSquareLocale = next;
+  // Re-emit existing state so SSE subscribers re-read the locale-augmented payload.
+  bus.emit('change', state);
 }
 
 /** Record the start of a `claude --print` run. Returns the new event id so the
@@ -262,7 +305,9 @@ export function addAgentEvent(kind: string): string {
       exitCode: null,
       summary: null,
     });
-    if (s.agentEvents.length > 50) s.agentEvents.shift();
+    if (s.agentEvents.length > 50) {
+      s.agentEvents.shift();
+    }
   }, { history: false });
   return id;
 }
@@ -273,10 +318,14 @@ export function addAgentEvent(kind: string): string {
 export function completeAgentEvent(id: string, exitCode: number, summary: string | null) {
   mutate(s => {
     const ev = s.agentEvents.find(e => e.id === id);
-    if (!ev) return;
+    if (!ev) {
+      return;
+    }
     ev.completedAt = Date.now();
     ev.exitCode = exitCode;
-    if (summary) ev.summary = summary;
+    if (summary) {
+      ev.summary = summary;
+    }
   }, { history: false });
 }
 
@@ -302,14 +351,18 @@ function framesInside(src: Square): Square[] {
  * Returns the new id of the duplicated source frame. */
 export function duplicateFrame(id: string): string | null {
   const src = state.squares.find(s => s.id === id);
-  if (!src) return null;
+  if (!src) {
+    return null;
+  }
   const group = [src, ...framesInside(src)];
   const dy = src.height + 12; // place the copy directly below the original
   let newSrcId = '';
   mutate(s => {
     const copies = group.map(sq => {
       const nid = uuid();
-      if (sq.id === src.id) newSrcId = nid;
+      if (sq.id === src.id) {
+        newSrcId = nid;
+      }
       return {
         ...sq,
         id: nid,
@@ -326,7 +379,9 @@ export function duplicateFrame(id: string): string | null {
 /** Move a frame and its contained frames by (dx, dy) in image units (one step). */
 export function moveFrameGroup(id: string, dx: number, dy: number): boolean {
   const src = state.squares.find(s => s.id === id);
-  if (!src) return false;
+  if (!src) {
+    return false;
+  }
   const ids = new Set<string>([src.id, ...framesInside(src).map(s => s.id)]);
   mutate(s => {
     for (const sq of s.squares) {
@@ -341,7 +396,9 @@ export function moveFrameGroup(id: string, dx: number, dy: number): boolean {
  * new source-copy id, or null if the source is gone. */
 export function pasteFrame(sourceId: string, tx: number, ty: number, cut: boolean): string | null {
   const src = state.squares.find(s => s.id === sourceId);
-  if (!src) return null;
+  if (!src) {
+    return null;
+  }
   const group = [src, ...framesInside(src)];
   const dx = tx - src.x;
   const dy = ty - src.y;
@@ -349,7 +406,9 @@ export function pasteFrame(sourceId: string, tx: number, ty: number, cut: boolea
   mutate(s => {
     const copies = group.map(sq => {
       const nid = uuid();
-      if (sq.id === src.id) newSrcId = nid;
+      if (sq.id === src.id) {
+        newSrcId = nid;
+      }
       return { ...sq, id: nid, x: sq.x + dx, y: sq.y + dy, assets: [...sq.assets] };
     });
     if (cut) {
@@ -376,7 +435,9 @@ export function resetState() {
 export function replaceState(snapshot: Partial<WorkspaceState>) {
   const empty = emptyState();
   const sourceImage = (() => {
-    if (!snapshot.sourceImage) return empty.sourceImage;
+    if (!snapshot.sourceImage) {
+      return empty.sourceImage;
+    }
     // Tampered save files could carry a crafted filename like `../../etc/passwd`.
     // basename() strips any path components → resolves to .bump-square/uploads/<name>
     // unconditionally. If basename differs from the raw value, the filename was

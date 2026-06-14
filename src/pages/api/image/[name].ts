@@ -1,16 +1,20 @@
 import type { APIRoute } from 'astro';
-import { readImageBytes } from '../../../lib/imageStore';
-import { getState } from '../../../lib/serverState';
+import { readImageBytes } from '~src/lib/imageStore';
+import { getState } from '~src/lib/serverState';
 
 export const prerender = false;
 
 /** Serves uploaded design images from .bump-square/uploads/. */
 export const GET: APIRoute = ({ params }) => {
   const name = params.name;
-  if (!name) return new Response('Not found', { status: 404 });
+  if (!name) {
+    return new Response('Not found', { status: 404 });
+  }
 
   const bytes = readImageBytes(name);
-  if (!bytes) return new Response('Not found', { status: 404 });
+  if (!bytes) {
+    return new Response('Not found', { status: 404 });
+  }
 
   // Serve only known raster types; never echo an attacker-influenced type that
   // could make the browser render HTML/SVG. nosniff blocks MIME-sniffing too.

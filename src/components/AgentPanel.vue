@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue';
-import { useWorkspaceStore } from '../stores/workspace';
+import { useWorkspaceStore } from '~src/stores/workspace';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const store = useWorkspaceStore();
 const listRef = ref<HTMLDivElement | null>(null);
 
@@ -27,9 +29,13 @@ function fmtTime(ts: number) {
 }
 
 function fmtDuration(startedAt: number, completedAt: number | null): string | null {
-  if (completedAt === null) return null;
+  if (completedAt === null) {
+    return null;
+  }
   const ms = completedAt - startedAt;
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
@@ -55,7 +61,7 @@ const events = computed(() => [...store.agentEvents].slice().reverse());
       <button
         v-if="events.length"
         class="ml-auto w-8 h-8 icon-btn hover:text-red-400"
-        title="清空 agent 事件紀錄"
+        :title="t('agent.clear')"
         @click="store.clearAgentEvents()"
       >
         <span class="i-lucide-trash-2" />
@@ -71,8 +77,8 @@ const events = computed(() => [...store.agentEvents].slice().reverse());
 
     <div ref="listRef" class="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar p-3 space-y-2">
       <div v-if="events.length === 0" class="text-zinc-500 text-xs leading-relaxed pt-4">
-        <p class="mb-3">每次按 header 上的 AI 按鈕(🧩 產生結構 / ✨ assets prompt),這裡會記一筆。</p>
-        <p>跑中的 entry 顯示 spinner;完成後顯示 <span class="i-lucide-check text-emerald-400 align-middle" /> / <span class="i-lucide-x text-red-400 align-middle" /> + 摘要那一行。即時輸出在底下 terminal panel。</p>
+        <p class="mb-3">{{ t('agent.emptyTop') }}</p>
+        <p>{{ t('agent.emptyBottom.prefix') }}<span class="i-lucide-check text-emerald-400 align-middle" /> / <span class="i-lucide-x text-red-400 align-middle" />{{ t('agent.emptyBottom.suffix') }}</p>
       </div>
 
       <div
@@ -104,7 +110,7 @@ const events = computed(() => [...store.agentEvents].slice().reverse());
 
     <div class="p-3 border-t border-zinc-700/60 text-xs text-zinc-500 leading-relaxed flex items-center gap-1.5">
       <span class="i-lucide-terminal text-zinc-400" />
-      <span>即時輸出在底下 terminal panel。</span>
+      <span>{{ t('agent.footer') }}</span>
     </div>
   </aside>
 </template>

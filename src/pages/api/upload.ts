@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { mutate } from '../../lib/serverState';
-import { saveImage, pruneImages } from '../../lib/imageStore';
-import { crossOriginBlocked } from '../../lib/guard';
+import { mutate } from '~src/lib/serverState';
+import { saveImage, pruneImages } from '~src/lib/imageStore';
+import { crossOriginBlocked } from '~src/lib/guard';
 
 export const prerender = false;
 
@@ -13,7 +13,9 @@ const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/g
  * reference (url + filename) is stored in the workspace state. */
 export const POST: APIRoute = async ({ request }) => {
   try {
-    if (crossOriginBlocked(request)) return json({ error: 'cross-origin blocked' }, 403);
+    if (crossOriginBlocked(request)) {
+      return json({ error: 'cross-origin blocked' }, 403);
+    }
 
     const body = await request.json() as {
       base64: string;      // raw base64 (no data: prefix)

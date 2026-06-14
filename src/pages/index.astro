@@ -1,7 +1,13 @@
 ---
-import AppShell from '../components/AppShell.vue';
+import AppShell from '~src/components/AppShell.vue';
+import { getLocale } from '~src/lib/serverState';
+
+// Read the persisted locale server-side so the SSR'd shell matches the
+// hydrated locale — without this, EN users would see a 100ms flash of
+// zh-TW before Pinia + SSE picked up the truth.
+const locale = getLocale();
 ---
-<html lang="en">
+<html lang={locale === 'zh-TW' ? 'zh-Hant' : 'en'}>
   <head>
     <meta charset="utf-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -13,6 +19,6 @@ import AppShell from '../components/AppShell.vue';
 
   </head>
   <body class="bg-zinc-950">
-    <AppShell client:load />
+    <AppShell client:load initialLocale={locale} />
   </body>
 </html>

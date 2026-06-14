@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useWorkspaceStore } from '../stores/workspace';
+import { useWorkspaceStore } from '~src/stores/workspace';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const store = useWorkspaceStore();
 const installing = ref(false);
 
@@ -22,16 +24,16 @@ async function install() {
   >
     <span class="text-sm flex items-center gap-1.5">
       <span class="i-lucide-triangle-alert" />
-      <span><strong>bump-layout</strong> skill 尚未安裝 — Claude 無法產生意圖結構</span>
+      <span><strong>bump-layout</strong>{{ t('installBanner.msg') }}</span>
     </span>
     <button
       class="text-xs px-3 py-1 rounded bg-amber-900 text-amber-50 hover:bg-amber-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       :disabled="installing"
       @click="install"
-    >{{ installing ? '安裝中…' : '一鍵安裝並重試' }}</button>
+    >{{ installing ? t('installBanner.installing') : t('installBanner.install') }}</button>
     <button
       class="text-xs text-amber-900 hover:text-amber-700 px-1 transition-colors"
-      title="關閉"
+      :title="t('installBanner.close')"
       @click="store.dismissSkillMissing()"
     >
       <span class="i-lucide-x" />
