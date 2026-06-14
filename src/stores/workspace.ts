@@ -14,15 +14,28 @@ interface AgentEvent {
 }
 interface SaveMeta { id: string; name: string; savedAt: number; path: string }
 
+interface Structure {
+  tree: StructureNode | null;
+  prompt: string | null;
+  assetsPrompt: string | null;
+  /** Server-stamped `boardVersion` at the time generate-structure / suggest-
+   * assets last ran. `null` until first run. UI compares against `boardVersion`
+   * to decide whether to flag the prompt as stale. */
+  promptVersion: number | null;
+  assetsPromptVersion: number | null;
+}
 interface ServerState {
   sourceImage: SourceImage | null;
   assets: Asset[];
   squares: Square[];
-  structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
+  structure: Structure;
   agentEvents: AgentEvent[];
   /** The save the live workspace was loaded from, if any. Powers SavesMenu's
    * "Save (overwrite)" vs "Save As (new)" branch. */
   currentSaveId: string | null;
+  /** Monotonic timetick bumped on every board mutation. Mismatch with
+   * `structure.*Version` = the agent-authored prompt is out of date. */
+  boardVersion: number;
   canUndo?: boolean;
   canRedo?: boolean;
 }
@@ -38,9 +51,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const sourceImage = ref<SourceImage | null>(null);
   const assets = ref<Asset[]>([]);
   const squares = ref<Square[]>([]);
-  const structure = ref<{ tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null }>({ tree: null, prompt: null, assetsPrompt: null });
+  const structure = ref<Structure>({
+    tree: null, prompt: null, assetsPrompt: null,
+    promptVersion: null, assetsPromptVersion: null,
+  });
   const agentEvents = ref<AgentEvent[]>([]);
   const currentSaveId = ref<string | null>(null);
+  const boardVersion = ref<number>(0);
 
   // --- Local-only UI state ---
   const step = ref<WorkflowStep>('upload');
@@ -74,12 +91,27 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     structure.value = s.structure;
     agentEvents.value = s.agentEvents;
     currentSaveId.value = s.currentSaveId ?? null;
+    boardVersion.value = s.boardVersion ?? 0;
     canUndo.value = s.canUndo ?? false;
     canRedo.value = s.canRedo ?? false;
 
     // Auto-advance the workflow as server state fills in.
     if (s.sourceImage && step.value === 'upload') step.value = 'layout';
   }
+
+  // Stale = a prompt exists, but the board has changed since it was authored.
+  // The agent-authored prompt is a snapshot; these flags drive the "需要重新
+  // 產生" banner in StructureView so users know to re-run before handoff.
+  const isPromptStale = computed(() =>
+    structure.value.tree !== null
+    && structure.value.promptVersion !== null
+    && boardVersion.value !== structure.value.promptVersion,
+  );
+  const isAssetsPromptStale = computed(() =>
+    structure.value.assetsPrompt !== null
+    && structure.value.assetsPromptVersion !== null
+    && boardVersion.value !== structure.value.assetsPromptVersion,
+  );
 
   let es: EventSource | null = null;
   function connect() {
@@ -204,10 +236,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const setRunningKind = (k: string | null) => { runningKind.value = k; };
 
   return {
-    sourceImage, assets, squares, structure, agentEvents,
+    sourceImage, assets, squares, structure, agentEvents, boardVersion,
     step, selectedAssetId, selectedSquareId, connected, runningKind, terminalRunning, skillMissing, saves, currentSaveId, canUndo, canRedo,
     viewport, setViewport,
-    selectedAsset, selectedSquare, currentSave,
+    selectedAsset, selectedSquare, currentSave, isPromptStale, isAssetsPromptStale,
     connect,
     uploadImage, addSquare, updateSquare, removeSquare, duplicateFrame,
     moveFrameGroup, pasteFrame, undo, redo,

@@ -22,7 +22,7 @@ const {
   RESIZE_HANDLES,
   screenRect, imgStyle, placeGhost, canvasCursor,
   startResize, onFrameMouseDown, copySelected, startPlacing, cancelPlacing,
-  toggleDraw, toggleHand,
+  toggleDraw,
   onMouseDown, onMouseMove, onMouseUp, toCanvasCoords,
 } = useFrameInteractions(store, vp, containerRef);
 
@@ -54,7 +54,6 @@ function onKeyDown(e: KeyboardEvent) {
     if (placing.value) { cancelPlacing(); return; } // cancel a pending paste first
     (document.activeElement as HTMLElement | null)?.blur();
     store.selectedSquareId = null;
-    handMode.value = false;
     drawMode.value = false;
     fit();
     return;
@@ -204,29 +203,20 @@ const {
            pixel offsets in the parent. -->
       <div class="relative flex items-center gap-2 pr-4">
         <AnnotationDot area="canvas-toolbar" pos="top-1 right-0" />
-        <!-- Tools as consistent toggle switches (on/off state reads at a glance).
-             Frame & Hand are mutually exclusive modes; Labels is a view toggle. -->
+        <!-- Single Frame toggle. Off = Hand mode (the default: drag pans, drag a
+             frame moves it). On = Frame mode (drag empty draws a frame; Ctrl +
+             drag a frame body to move it instead of nesting). -->
         <div class="flex items-center gap-4">
           <button
             class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
             role="switch" :aria-checked="drawMode"
-            title="Draw a new frame"
+            :title="drawMode ? '退出 Frame mode(回到 Hand)' : '進入 Frame mode:拖曳空白處畫新 frame,Ctrl + 拖曳 frame 才能移動'"
             @click="toggleDraw"
           >
-            <span class="i-lucide-square" /> Frame
+            <span :class="drawMode ? 'i-lucide-square' : 'i-lucide-hand'" />
+            {{ drawMode ? 'Frame' : 'Hand' }}
             <span class="relative w-9 h-5 rounded-full transition-colors" :class="drawMode ? 'bg-violet-400' : 'bg-zinc-600'">
               <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="drawMode ? 'left-[18px]' : 'left-0.5'"></span>
-            </span>
-          </button>
-          <button
-            class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
-            role="switch" :aria-checked="handMode"
-            title="Pan the canvas (or hold Space / middle-drag)"
-            @click="toggleHand"
-          >
-            <span class="i-lucide-hand" /> Hand
-            <span class="relative w-9 h-5 rounded-full transition-colors" :class="handMode ? 'bg-violet-400' : 'bg-zinc-600'">
-              <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="handMode ? 'left-[18px]' : 'left-0.5'"></span>
             </span>
           </button>
         </div>

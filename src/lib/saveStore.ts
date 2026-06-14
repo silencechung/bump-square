@@ -33,8 +33,13 @@ export interface SaveMeta {
    * (reader skills) to load. Always under SAVES_DIR/<id>.json. */
   path: string;
 }
-/** A save stores only the BOARD (not the agentEvents session log). */
-type BoardState = Pick<WorkspaceState, 'sourceImage' | 'assets' | 'squares' | 'structure'>;
+/** A save stores only the BOARD (not the agentEvents session log).
+ * `boardVersion` is included so the save's freshness verdict
+ * (`boardVersion` vs `structure.*Version`) carries over to a load. */
+type BoardState = Pick<
+  WorkspaceState,
+  'sourceImage' | 'assets' | 'squares' | 'structure' | 'boardVersion'
+>;
 interface SaveRecord extends SaveMeta {
   state: BoardState;
 }
@@ -84,6 +89,7 @@ export function createSave(name: string, state: WorkspaceState): SaveMeta {
     assets: state.assets,
     squares: state.squares,
     structure: state.structure,
+    boardVersion: state.boardVersion,
   };
   const record: SaveRecord = { ...meta, state: structuredClone(board) };
   const tmp = `${target}.tmp`;
@@ -111,6 +117,7 @@ export function updateSave(id: string, state: WorkspaceState, name?: string): Sa
       assets: state.assets,
       squares: state.squares,
       structure: state.structure,
+      boardVersion: state.boardVersion,
     };
     const record: SaveRecord = { ...meta, state: structuredClone(board) };
     const tmp = `${target}.tmp`;

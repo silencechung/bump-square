@@ -21,6 +21,15 @@
 
 意思就是,**它的職責終點是那份 spec**。產不產 code、產什麼 code、誰來產,跟它無關。
 
+## 長這樣
+
+![bump-square 在 Layout 步驟的截圖,左邊是被畫滿紫色 Frame 的設計稿,右邊是 Notes rail 在記每一塊的意圖,最右邊 Agent Events panel 顯示剛剛 generate-structure / suggest-assets 的執行紀錄](public/screenshot.png)
+
+中間那塊就是 Layout 步驟:把設計稿當底圖、在上面畫框、右邊 Notes rail 一塊寫一句意圖
+(例如 `LinkArrow → click open new tab`、`ListWidge → 上下邊線 / height: 兩種尺寸 / padding-left: 40px`)。
+按 `🧩 產生結構` 後,agent 會根據框的包含關係 + 你寫的 comment 整理成結構樹,
+寫進右側 Agent Events panel 看得到的那份 markdown spec。
+
 ## 流程
 
 ```mermaid

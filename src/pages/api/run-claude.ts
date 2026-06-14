@@ -15,6 +15,7 @@ const PROMPTS: Record<string, (state: ReturnType<typeof getState>) => string> = 
     const frameCount = s.squares.length;
     return `/bump-layout
 workspace: ${workspacePath}
+忽略 Frame 位置些微重疊的問題 — 使用者在小尺寸截圖上不好精準拉線,只要看起來像「在裡面」就視為 containment;邊緣外推幾個 px 也算包含。
 目前有 ${frameCount} 個 Frame。
 依各 Frame 的 containment（包含關係）與 comment（使用者意圖）產生意圖結構樹。
 完成後更新 workspace.json 的 structure 欄位（tree + prompt）。`;
