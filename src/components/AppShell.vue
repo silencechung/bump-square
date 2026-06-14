@@ -9,8 +9,12 @@ import StructureView from './StructureView.vue';
 import SavesMenu from './SavesMenu.vue';
 import TerminalPanel from './TerminalPanel.vue';
 import SkillInstallBanner from './SkillInstallBanner.vue';
+import AnnotationDot from './AnnotationDot.vue';
+import AnnotationOverlay from './AnnotationOverlay.vue';
+import { useAnnotations } from '../composables/useAnnotations';
 
 const store = useWorkspaceStore();
+const { annotationMode, toggleMode } = useAnnotations();
 
 onMounted(() => {
   store.connect();
@@ -128,7 +132,7 @@ function canVisit(s: string): boolean {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col bg-zinc-900 text-zinc-100">
+  <div class="fixed inset-0 overflow-hidden flex flex-col bg-zinc-900 text-zinc-100">
     <header class="h-11 shrink-0 border-b border-zinc-800 flex items-center px-4 gap-4">
       <!-- Brand lockup. Inert — breadcrumb owns step navigation.
            Two-tone wordmark: "Square" picks up the lighter mark square's
@@ -144,7 +148,7 @@ function canVisit(s: string): boolean {
         </span>
       </div>
       <!-- Breadcrumb steps as chevron tabs: the triangular edge shows direction. -->
-      <div class="flex items-center gap-0.5">
+      <div class="relative flex items-center gap-0.5">
         <button
           v-for="s in steps"
           :key="s"
@@ -154,6 +158,7 @@ function canVisit(s: string): boolean {
           :title="stepTitles[s]"
           @click="store.step = s as typeof store.step"
         >{{ stepLabels[s] }}</button>
+        <AnnotationDot area="breadcrumb" pos="-top-0.5 -right-0.5" />
       </div>
       <div class="ml-auto flex items-center gap-3">
         <span
@@ -168,7 +173,7 @@ function canVisit(s: string): boolean {
         <!-- Save cluster: SavesMenu + copy-latest-path button. Paired because
              "copy save path" is conceptually a save operation (it's the export
              handoff the downstream reader skill consumes). -->
-        <div class="flex items-center gap-2">
+        <div class="relative flex items-center gap-2">
           <SavesMenu />
           <!-- Copy latest save path → for downstream reader skill. Mirrors the
                SavesMenu button's icon+text shape, so they read as a pair. -->
@@ -187,12 +192,13 @@ function canVisit(s: string): boolean {
             <span :class="copyFeedback ? 'i-lucide-clipboard-check' : 'i-lucide-clipboard'" />
             <span>{{ copyFeedback ? '已複製' : '複製路徑' }}</span>
           </button>
+          <AnnotationDot area="save-cluster" pos="-top-1 -right-1" />
         </div>
 
         <!-- AI actions cluster — every button here calls `claude --print`.
              Unified violet→cyan gradient + sparkle prefix marks them as AI-driven.
              Each spins only when its own kind is in flight (no more linkage). -->
-        <div class="flex items-center gap-1 pl-3 border-l border-zinc-700">
+        <div class="relative flex items-center gap-1 pl-3 border-l border-zinc-700">
           <span class="text-[10px] text-zinc-500 uppercase tracking-wider pr-1">AI</span>
           <button
             v-for="a in aiActions"
@@ -217,11 +223,12 @@ function canVisit(s: string): boolean {
             <span v-else class="i-lucide-sparkles" />
             <span>{{ store.runningKind === a.kind ? a.runningLabel : a.label }}</span>
           </button>
+          <AnnotationDot area="ai-cluster" pos="-top-1 -right-1" />
         </div>
 
         <!-- Destructive: kept apart from save / AI clusters by its own separator
              so it can't be mis-clicked while reaching for the AI buttons. -->
-        <div class="flex items-center pl-3 border-l border-zinc-700">
+        <div class="relative flex items-center pl-3 border-l border-zinc-700">
           <button
             class="text-xs px-3 py-1 rounded-full font-medium transition-colors flex items-center gap-1.5"
             :class="confirmingReset
@@ -233,9 +240,28 @@ function canVisit(s: string): boolean {
             <span class="i-lucide-trash-2" />
             <span>{{ confirmingReset ? '確定清空？' : 'Reset' }}</span>
           </button>
+          <AnnotationDot area="reset" pos="-top-1 -right-1" />
         </div>
+
+        <!-- Annotation toggle. Sits at the far right after Reset — meta /
+             passive (just toggles UI annotations on/off, no destructive
+             action), so it's safe next to Reset. Pulses violet when on to
+             telegraph "hint mode active". -->
+        <button
+          type="button"
+          class="text-zinc-400 hover:text-violet-300 transition-colors flex items-center justify-center w-7 h-7 rounded-full ml-1"
+          :class="annotationMode ? 'text-violet-300 bg-violet-500/15 shadow-[0_0_10px_-2px_rgba(167,139,250,0.6)]' : ''"
+          :title="annotationMode ? '關閉功能說明' : '開啟功能說明 — 在每個功能旁顯示可點 dot'"
+          aria-label="toggle annotation mode"
+          :aria-pressed="annotationMode"
+          @click="toggleMode"
+        >
+          <span class="i-lucide-help-circle text-base" />
+        </button>
       </div>
     </header>
+
+    <AnnotationOverlay />
 
     <UploadPanel v-if="store.step === 'upload'" />
 

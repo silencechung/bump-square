@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import '@xterm/xterm/css/xterm.css';
 import { useWorkspaceStore } from '../stores/workspace';
+import AnnotationDot from './AnnotationDot.vue';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -128,8 +129,9 @@ function onDragEnd() {
     />
 
     <!-- Toolbar -->
-    <div class="flex items-center gap-2 px-3 py-1 border-b border-zinc-700 shrink-0">
+    <div class="relative flex items-center gap-2 px-3 py-1 border-b border-zinc-700 shrink-0">
       <span class="text-xs text-zinc-400 font-mono select-none">claude --print</span>
+      <AnnotationDot area="terminal-panel" pos="top-1 left-[120px]" />
       <div class="ml-auto flex items-center gap-1">
         <button
           class="w-7 h-7 icon-btn hover:text-red-400"

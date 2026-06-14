@@ -5,6 +5,7 @@ import type { Square } from '../types';
 import { useViewport } from '../composables/useViewport';
 import { useNotesRail } from '../composables/useNotesRail';
 import { useFrameInteractions } from '../composables/useFrameInteractions';
+import AnnotationDot from './AnnotationDot.vue';
 
 const store = useWorkspaceStore();
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -197,52 +198,59 @@ const {
   <div class="flex-1 flex flex-col overflow-hidden bg-zinc-900">
     <!-- Toolbar -->
     <div class="h-12 shrink-0 border-b border-zinc-800/80 flex items-center px-3 gap-2">
-      <!-- Tools as consistent toggle switches (on/off state reads at a glance).
-           Frame & Hand are mutually exclusive modes; Labels is a view toggle. -->
-      <div class="flex items-center gap-4">
-        <button
-          class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
-          role="switch" :aria-checked="drawMode"
-          title="Draw a new frame"
-          @click="toggleDraw"
-        >
-          <span class="i-lucide-square" /> Frame
-          <span class="relative w-9 h-5 rounded-full transition-colors" :class="drawMode ? 'bg-violet-400' : 'bg-zinc-600'">
-            <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="drawMode ? 'left-[18px]' : 'left-0.5'"></span>
-          </span>
-        </button>
-        <button
-          class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
-          role="switch" :aria-checked="handMode"
-          title="Pan the canvas (or hold Space / middle-drag)"
-          @click="toggleHand"
-        >
-          <span class="i-lucide-hand" /> Hand
-          <span class="relative w-9 h-5 rounded-full transition-colors" :class="handMode ? 'bg-violet-400' : 'bg-zinc-600'">
-            <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="handMode ? 'left-[18px]' : 'left-0.5'"></span>
-          </span>
-        </button>
-      </div>
-      <span class="text-zinc-500 text-xs ml-3">{{ store.squares.length }} frame{{ store.squares.length !== 1 ? 's' : '' }}</span>
+      <!-- Tools cluster: Frame / Hand mode toggles + frame counter + undo/redo.
+           Wrapped in a `relative` div so the annotation dot anchors to this
+           group's top-right (just past the redo button) without us guessing
+           pixel offsets in the parent. -->
+      <div class="relative flex items-center gap-2 pr-4">
+        <AnnotationDot area="canvas-toolbar" pos="top-1 right-0" />
+        <!-- Tools as consistent toggle switches (on/off state reads at a glance).
+             Frame & Hand are mutually exclusive modes; Labels is a view toggle. -->
+        <div class="flex items-center gap-4">
+          <button
+            class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
+            role="switch" :aria-checked="drawMode"
+            title="Draw a new frame"
+            @click="toggleDraw"
+          >
+            <span class="i-lucide-square" /> Frame
+            <span class="relative w-9 h-5 rounded-full transition-colors" :class="drawMode ? 'bg-violet-400' : 'bg-zinc-600'">
+              <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="drawMode ? 'left-[18px]' : 'left-0.5'"></span>
+            </span>
+          </button>
+          <button
+            class="flex items-center gap-2 text-sm text-zinc-300 hover:text-zinc-100 transition-colors"
+            role="switch" :aria-checked="handMode"
+            title="Pan the canvas (or hold Space / middle-drag)"
+            @click="toggleHand"
+          >
+            <span class="i-lucide-hand" /> Hand
+            <span class="relative w-9 h-5 rounded-full transition-colors" :class="handMode ? 'bg-violet-400' : 'bg-zinc-600'">
+              <span class="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" :class="handMode ? 'left-[18px]' : 'left-0.5'"></span>
+            </span>
+          </button>
+        </div>
+        <span class="text-zinc-500 text-xs ml-3">{{ store.squares.length }} frame{{ store.squares.length !== 1 ? 's' : '' }}</span>
 
-      <!-- Undo / redo (Ctrl+Z · Ctrl+Shift+Z / Ctrl+Y). -->
-      <div class="flex items-center gap-1 ml-2">
-        <button
-          class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
-          title="復原 (Ctrl+Z)"
-          :disabled="!store.canUndo"
-          @click="store.undo()"
-        >
-          <span class="i-lucide-undo-2" />
-        </button>
-        <button
-          class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
-          title="重做 (Ctrl+Shift+Z / Ctrl+Y)"
-          :disabled="!store.canRedo"
-          @click="store.redo()"
-        >
-          <span class="i-lucide-redo-2" />
-        </button>
+        <!-- Undo / redo (Ctrl+Z · Ctrl+Shift+Z / Ctrl+Y). -->
+        <div class="flex items-center gap-1 ml-2">
+          <button
+            class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
+            title="復原 (Ctrl+Z)"
+            :disabled="!store.canUndo"
+            @click="store.undo()"
+          >
+            <span class="i-lucide-undo-2" />
+          </button>
+          <button
+            class="w-8 h-8 icon-btn hover:text-zinc-100 disabled:opacity-30"
+            title="重做 (Ctrl+Shift+Z / Ctrl+Y)"
+            :disabled="!store.canRedo"
+            @click="store.redo()"
+          >
+            <span class="i-lucide-redo-2" />
+          </button>
+        </div>
       </div>
 
       <!-- View controls (zoom), grouped as one unit, distinct from the tools. -->
@@ -275,6 +283,7 @@ const {
       @wheel="onWheel"
       @dblclick="fit"
     >
+      <AnnotationDot area="canvas" pos="top-3 right-3" />
       <!-- Place-mode hint banner. -->
       <div
         v-if="placing"
@@ -361,7 +370,8 @@ const {
     <!-- Notes rail: every frame's label + intent comment, parked off to the
          side so it never overlaps dense or nested frames. Screen space → it
          stays the same size at any zoom. -->
-    <aside v-if="notesOpen" class="w-64 shrink-0 h-full border-l border-zinc-700/60 bg-[#2c2c33] overflow-y-auto overflow-x-hidden no-scrollbar" @scroll="measureSelectedRow">
+    <aside v-if="notesOpen" class="relative w-64 shrink-0 h-full border-l border-zinc-700/60 bg-[#2c2c33] overflow-y-auto overflow-x-hidden no-scrollbar" @scroll="measureSelectedRow">
+      <AnnotationDot area="notes-rail" pos="top-3 right-2" />
       <div class="px-3 py-2.5 flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-300 border-b border-zinc-700/60 sticky top-0 bg-[#2c2c33]/95 backdrop-blur z-10">
         <button
           class="w-8 h-8 icon-btn hover:text-zinc-100"

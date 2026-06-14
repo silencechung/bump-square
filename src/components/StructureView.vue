@@ -3,6 +3,7 @@ import { useWorkspaceStore } from '../stores/workspace';
 import { computed, ref } from 'vue';
 import MarkdownIt from 'markdown-it';
 import StructureTree from './StructureTree.vue';
+import AnnotationDot from './AnnotationDot.vue';
 import { treeToConsole } from '../lib/structureText';
 
 const store = useWorkspaceStore();
@@ -51,9 +52,10 @@ function copyHandoff() {
 
 <template>
   <div class="flex-1 flex flex-col overflow-hidden p-6 gap-4">
-    <div class="flex items-center justify-between">
+    <div class="relative flex items-center justify-between">
       <h2 class="text-sm font-semibold text-zinc-300">Generated Structure</h2>
       <span class="text-xs text-zinc-500">AI actions 在 header 右上角</span>
+      <AnnotationDot area="structure-view" pos="-top-1 left-[148px]" />
     </div>
 
     <!-- Three tabs over one pane: Tree (visual) · JSON (raw) · Prompt (the
