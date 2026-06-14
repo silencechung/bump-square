@@ -2,25 +2,31 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
 import { useAnnotations } from '../composables/useAnnotations';
+import { useLocale, type Locale } from '../composables/useLocale';
 
-// Compile every help/*.md into the bundle at build time. When task #3 (i18n)
-// lands, restructure as help/<locale>/*.md and resolve by locale here — the
-// API surface above does not change.
-const helpModules = import.meta.glob('../content/help/*.md', {
+// Compile every help/<locale>/*.md into the bundle at build time, keyed as
+// helpByLocale[locale][area]. Missing-locale lookups fall back to zh-TW so
+// adding a new locale doesn't require translating every file up front.
+const helpModules = import.meta.glob('../content/help/**/*.md', {
   eager: true,
   query: '?raw',
   import: 'default',
 }) as Record<string, string>;
 
-const helpByArea: Record<string, string> = {};
+const FALLBACK_LOCALE: Locale = 'zh-TW';
+const helpByLocale: Record<string, Record<string, string>> = {};
 for (const path of Object.keys(helpModules)) {
-  const name = path.split('/').pop()!.replace(/\.md$/, '');
-  helpByArea[name] = helpModules[path];
+  const parts = path.split('/');
+  const file = parts.pop()!;
+  const locale = parts.pop()!;
+  const area = file.replace(/\.md$/, '');
+  (helpByLocale[locale] ??= {})[area] = helpModules[path];
 }
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
 const { activeArea, close } = useAnnotations();
+const { locale } = useLocale();
 
 // Anchor rect of the dot whose area is active. Refreshed on resize/scroll/
 // activeArea change so the popover follows panel resizes or canvas zoom.
@@ -34,8 +40,9 @@ const viewport = ref({ w: 0, h: 0 });
 
 const html = computed(() => {
   if (!activeArea.value) return '';
-  const raw = helpByArea[activeArea.value];
-  return raw ? md.render(raw) : '<p>(說明缺失)</p>';
+  const area = activeArea.value;
+  const raw = helpByLocale[locale.value]?.[area] ?? helpByLocale[FALLBACK_LOCALE]?.[area];
+  return raw ? md.render(raw) : '<p>(missing help content)</p>';
 });
 
 function updateRect() {

@@ -12,9 +12,11 @@ import SkillInstallBanner from './SkillInstallBanner.vue';
 import AnnotationDot from './AnnotationDot.vue';
 import AnnotationOverlay from './AnnotationOverlay.vue';
 import { useAnnotations } from '../composables/useAnnotations';
+import { useLocale } from '../composables/useLocale';
 
 const store = useWorkspaceStore();
 const { annotationMode, toggleMode } = useAnnotations();
+const { locale, toggleLocale } = useLocale();
 
 onMounted(() => {
   store.connect();
@@ -242,6 +244,19 @@ function canVisit(s: string): boolean {
           </button>
           <AnnotationDot area="reset" pos="-top-1 -right-1" />
         </div>
+
+        <!-- Locale toggle. Only affects the annotation help popover today
+             (FEATURES.md #3 scoped this narrowly); other UI strings stay 繁中
+             until a follow-up ticket expands scope. -->
+        <button
+          type="button"
+          class="text-zinc-400 hover:text-violet-300 transition-colors flex items-center justify-center h-7 px-2 rounded-full ml-1 text-[11px] font-medium tracking-wide tabular-nums"
+          :title="locale === 'zh-TW' ? 'Switch help popover to English' : '把功能說明切回繁中'"
+          aria-label="toggle locale"
+          @click="toggleLocale"
+        >
+          {{ locale === 'zh-TW' ? '繁' : 'EN' }}
+        </button>
 
         <!-- Annotation toggle. Sits at the far right after Reset — meta /
              passive (just toggles UI annotations on/off, no destructive
