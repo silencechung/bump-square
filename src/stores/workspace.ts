@@ -13,6 +13,9 @@ interface ServerState {
   squares: Square[];
   structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
   agentNotes: AgentNote[];
+  /** The save the live workspace was loaded from, if any. Powers SavesMenu's
+   * "Save (overwrite)" vs "Save As (new)" branch. */
+  currentSaveId: string | null;
   canUndo?: boolean;
   canRedo?: boolean;
 }
@@ -30,6 +33,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const squares = ref<Square[]>([]);
   const structure = ref<{ tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null }>({ tree: null, prompt: null, assetsPrompt: null });
   const agentNotes = ref<AgentNote[]>([]);
+  const currentSaveId = ref<string | null>(null);
 
   // --- Local-only UI state ---
   const step = ref<WorkflowStep>('upload');
@@ -62,6 +66,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     squares.value = s.squares;
     structure.value = s.structure;
     agentNotes.value = s.agentNotes;
+    currentSaveId.value = s.currentSaveId ?? null;
     canUndo.value = s.canUndo ?? false;
     canRedo.value = s.canRedo ?? false;
 
@@ -133,6 +138,17 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     await dispatch('saveState', { name });
     await refreshSaves();
   }
+  // Save-in-place: overwrites whichever save the board was loaded from.
+  // Caller is expected to gate on currentSaveId being non-null (the button
+  // only shows up in that state). Refreshes the list so timestamps update.
+  async function updateCurrentSave() {
+    await dispatch('updateCurrentSave');
+    await refreshSaves();
+  }
+  // Currently-loaded save's metadata (for the "ListWidge" header label).
+  const currentSave = computed(() =>
+    saves.value.find(s => s.id === currentSaveId.value) ?? null,
+  );
   // Load replaces the live board; the new state arrives back via SSE.
   const loadSave = (id: string) => dispatch('loadState', { id });
   async function removeSave(id: string) {
@@ -182,14 +198,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   return {
     sourceImage, assets, squares, structure, agentNotes,
-    step, selectedAssetId, selectedSquareId, connected, runningKind, terminalRunning, skillMissing, saves, canUndo, canRedo,
+    step, selectedAssetId, selectedSquareId, connected, runningKind, terminalRunning, skillMissing, saves, currentSaveId, canUndo, canRedo,
     viewport, setViewport,
-    selectedAsset, selectedSquare,
+    selectedAsset, selectedSquare, currentSave,
     connect,
     uploadImage, addSquare, updateSquare, removeSquare, duplicateFrame,
     moveFrameGroup, pasteFrame, undo, redo,
     placeAssetInSquare, updateAsset, removeAsset, reset, clearAgentNotes,
     runClaude, setRunningKind, installSkillAndRetry, dismissSkillMissing,
-    refreshSaves, saveCurrent, loadSave, removeSave,
+    refreshSaves, saveCurrent, updateCurrentSave, loadSave, removeSave,
   };
 });

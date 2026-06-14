@@ -92,6 +92,36 @@ export function createSave(name: string, state: WorkspaceState): SaveMeta {
   return meta;
 }
 
+/** Overwrite an existing save's board state in place (same id, same file).
+ * Optionally rename. Returns the updated metadata, or null if the id doesn't
+ * resolve / the file is gone. Atomic write (tmp + rename) matches createSave. */
+export function updateSave(id: string, state: WorkspaceState, name?: string): SaveMeta | null {
+  const target = fileFor(id);
+  if (!target || !existsSync(target)) return null;
+  try {
+    const existing = JSON.parse(readFileSync(target, 'utf8')) as SaveRecord;
+    const meta: SaveMeta = {
+      id: existing.id,
+      name: (name?.trim() || existing.name) || 'Untitled',
+      savedAt: Date.now(),
+      path: target,
+    };
+    const board: BoardState = {
+      sourceImage: state.sourceImage,
+      assets: state.assets,
+      squares: state.squares,
+      structure: state.structure,
+    };
+    const record: SaveRecord = { ...meta, state: structuredClone(board) };
+    const tmp = `${target}.tmp`;
+    writeFileSync(tmp, JSON.stringify(record), 'utf8');
+    renameSync(tmp, target);
+    return meta;
+  } catch {
+    return null;
+  }
+}
+
 /** Read back a saved board (sourceImage/assets/squares/structure), or null. */
 export function loadSave(id: string): BoardState | null {
   try {

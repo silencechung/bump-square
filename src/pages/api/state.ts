@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { v4 as uuid } from 'uuid';
 import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, clearAgentNotes } from '../../lib/serverState';
-import { listSaves, createSave, loadSave, deleteSave } from '../../lib/saveStore';
+import { listSaves, createSave, loadSave, deleteSave, updateSave } from '../../lib/saveStore';
 import { crossOriginBlocked } from '../../lib/guard';
 import type { Square } from '../../types';
 
@@ -106,19 +106,48 @@ export const POST: APIRoute = async ({ request }) => {
 
       case 'saveState': {
         const save = createSave((payload.name as string) ?? 'Untitled', getState());
+        // Newly-saved board is now "linked" to this save — Save button can
+        // overwrite it on next press without prompting for a name.
+        mutate(s => { s.currentSaveId = save.id; }, { history: false });
         return json({ ok: true, save });
       }
 
       case 'loadState': {
-        const snapshot = loadSave(payload.id as string);
+        const id = payload.id as string;
+        const snapshot = loadSave(id);
         if (!snapshot) return json({ error: 'Save not found' }, 404);
         replaceState(snapshot);
+        // Track which save we loaded from so SavesMenu can show "overwrite
+        // this one" instead of always Save-As. Separate mutate (no history)
+        // because the link itself isn't a board change.
+        mutate(s => { s.currentSaveId = id; }, { history: false });
         return json({ ok: true });
       }
 
-      case 'deleteSave':
-        deleteSave(payload.id as string);
+      // Save-in-place: overwrite the currentSaveId's record with current
+      // board state. Fails if nothing is loaded — UI guards against this
+      // anyway, but the server check keeps malformed callers honest.
+      case 'updateCurrentSave': {
+        const id = getState().currentSaveId;
+        if (!id) return json({ error: 'no currently-loaded save' }, 400);
+        const meta = updateSave(id, getState());
+        if (!meta) {
+          // Loaded save was deleted out from under us — clear the link.
+          mutate(s => { s.currentSaveId = null; }, { history: false });
+          return json({ error: 'save no longer exists' }, 404);
+        }
+        return json({ ok: true, save: meta });
+      }
+
+      case 'deleteSave': {
+        const id = payload.id as string;
+        deleteSave(id);
+        // If we deleted the currently-loaded save, drop the link too.
+        if (getState().currentSaveId === id) {
+          mutate(s => { s.currentSaveId = null; }, { history: false });
+        }
         return json({ ok: true, saves: listSaves() });
+      }
 
       default:
         return json({ error: `Unknown action: ${action}` }, 400);

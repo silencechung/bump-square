@@ -21,6 +21,12 @@ export interface WorkspaceState {
   squares: Square[];
   structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
   agentNotes: { id: string; text: string; timestamp: number }[];
+  /** The save the live workspace originated from (if loaded via SavesMenu).
+   * Used so the menu can offer "Save" (overwrite this one) vs "Save As"
+   * (always new). Cleared on upload-new-image / reset. Workspace metadata,
+   * not board content — deliberately NOT snapshotted into BoardSnapshot
+   * (a saved snapshot doesn't carry its own id; undo doesn't restore it). */
+  currentSaveId: string | null;
 }
 
 function emptyState(): WorkspaceState {
@@ -30,6 +36,7 @@ function emptyState(): WorkspaceState {
     squares: [],
     structure: { tree: null, prompt: null, assetsPrompt: null },
     agentNotes: [],
+    currentSaveId: null,
   };
 }
 

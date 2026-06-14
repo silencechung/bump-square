@@ -36,6 +36,14 @@ async function save() {
   if (!n) return;
   await store.saveCurrent(n);
   name.value = '';
+  open.value = false;
+}
+
+// Overwrite the currently-loaded save in place. The "儲存" button switches
+// to this when a save was loaded (rather than starting from a fresh upload).
+async function updateLoaded() {
+  await store.updateCurrentSave();
+  open.value = false;
 }
 
 function openSaveAs() {
@@ -84,8 +92,22 @@ function fmt(ts: number) {
       v-if="open"
       class="absolute right-0 mt-2 w-72 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl shadow-black/40 p-3 z-50"
     >
-      <!-- Quick save -->
-      <div class="flex items-center gap-2">
+      <!-- Quick save. Top section adapts: with a loaded save, show its name
+           and overwrite on press; without one (fresh upload or post-reset),
+           show the input and create a new entry. "另存新檔" below stays
+           available in both states for explicit copy-out. -->
+      <div v-if="store.currentSave" class="flex items-center gap-2 px-1">
+        <div class="flex-1 min-w-0">
+          <div class="text-xs text-zinc-500 leading-tight">目前載入</div>
+          <div class="text-sm text-zinc-100 truncate font-medium">{{ store.currentSave.name }}</div>
+        </div>
+        <button
+          class="text-sm px-3 py-1.5 btn-primary"
+          title="用目前 board 覆寫這個存檔"
+          @click="updateLoaded"
+        >儲存</button>
+      </div>
+      <div v-else class="flex items-center gap-2">
         <input
           v-model="name"
           type="text"
