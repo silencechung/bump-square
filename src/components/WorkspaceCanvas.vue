@@ -60,7 +60,9 @@ function onKeyDown(e: KeyboardEvent) {
     fit();
     return;
   }
-  if (isTyping(e)) return;                    // don't hijack keys while typing
+  if (isTyping(e)) {
+    return;                    // don't hijack keys while typing
+  }
   // Undo / redo / clipboard (Ctrl on Win/Linux, ⌘ on macOS).
   if (e.ctrlKey || e.metaKey) {
     const k = e.key.toLowerCase();
@@ -78,7 +80,9 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 function onKeyUp(e: KeyboardEvent) {
-  if (e.code === 'Space') spaceDown.value = false;
+  if (e.code === 'Space') {
+    spaceDown.value = false;
+  }
 }
 function isTyping(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
@@ -86,7 +90,9 @@ function isTyping(e: KeyboardEvent) {
 }
 
 watch(() => store.step, step => {
-  if (step === 'layout') drawMode.value = false;
+  if (step === 'layout') {
+    drawMode.value = false;
+  }
 });
 
 function onWheel(e: WheelEvent) {
@@ -102,7 +108,9 @@ function onSquareDragOver(e: DragEvent, squareId: string) {
 function onSquareDrop(e: DragEvent, squareId: string) {
   e.preventDefault();
   const assetId = e.dataTransfer?.getData('assetId');
-  if (assetId) store.placeAssetInSquare(assetId, squareId);
+  if (assetId) {
+    store.placeAssetInSquare(assetId, squareId);
+  }
 }
 
 function selectSquare(id: string) {
@@ -163,8 +171,12 @@ function commentDisplay(sq: Square): CommentDisplay {
   // While renaming THIS frame, don't open its comment editor: two autofocus
   // fields (name input + comment textarea, both v-focus) would fight for focus
   // and the name input would blur → commit → the rename closes instantly.
-  if (store.selectedSquareId === sq.id && editingLabelId.value !== sq.id) return 'editing';
-  if (sq.comment && sq.comment.trim()) return 'card';
+  if (store.selectedSquareId === sq.id && editingLabelId.value !== sq.id) {
+    return 'editing';
+  }
+  if (sq.comment && sq.comment.trim()) {
+    return 'card';
+  }
   return 'hint';
 }
 
@@ -175,7 +187,9 @@ function hasAiNote(sq: Square) {
   return !!(sq.aiNote && sq.aiNote.trim());
 }
 function acceptAiNote(sq: Square) {
-  if (!sq.aiNote) return;
+  if (!sq.aiNote) {
+    return;
+  }
   store.updateSquare(sq.id, { comment: sq.aiNote, aiNote: '' });
 }
 function dismissAiNote(sq: Square) {

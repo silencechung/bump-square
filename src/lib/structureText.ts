@@ -29,7 +29,9 @@ import type { StructureNode } from '../types';
  *     - 主要 CTA：送出登入…
  */
 export function treeToConsole(root: StructureNode | null): string {
-  if (!root) return '';
+  if (!root) {
+    return '';
+  }
   const treeLines: string[] = [];
   const detailLines: string[] = [];
 

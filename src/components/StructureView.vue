@@ -48,7 +48,9 @@ function resetPrompt() {
 const renderedPrompt = computed(() => md.render(effectivePrompt.value || ''));
 
 function copyHandoff() {
-  if (effectivePrompt.value) navigator.clipboard.writeText(effectivePrompt.value);
+  if (effectivePrompt.value) {
+    navigator.clipboard.writeText(effectivePrompt.value);
+  }
 }
 </script>
 

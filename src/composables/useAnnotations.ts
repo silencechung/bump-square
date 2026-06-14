@@ -30,7 +30,9 @@ export function useAnnotations() {
     activeArea,
     toggleMode() {
       annotationMode.value = !annotationMode.value;
-      if (!annotationMode.value) activeArea.value = null;
+      if (!annotationMode.value) {
+        activeArea.value = null;
+      }
     },
     open(area: HelpArea) {
       activeArea.value = activeArea.value === area ? null : area;

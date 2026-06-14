@@ -41,7 +41,9 @@ const rect = ref<DOMRect | null>(null);
 const viewport = ref({ w: 0, h: 0 });
 
 const html = computed(() => {
-  if (!activeArea.value) return '';
+  if (!activeArea.value) {
+    return '';
+  }
   const area = activeArea.value;
   const raw = helpByLocale[store.locale]?.[area] ?? helpByLocale[DEFAULT_LOCALE]?.[area];
   return raw ? md.render(raw) : `<p>${t('annotation.missing')}</p>`;
@@ -64,13 +66,19 @@ function onResize() {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && activeArea.value) close();
+  if (e.key === 'Escape' && activeArea.value) {
+    close();
+  }
 }
 
 function onClickOutside(e: MouseEvent) {
-  if (!activeArea.value) return;
+  if (!activeArea.value) {
+    return;
+  }
   const t = e.target as HTMLElement;
-  if (t.closest('.annotation-popover, [data-annotation-area]')) return;
+  if (t.closest('.annotation-popover, [data-annotation-area]')) {
+    return;
+  }
   close();
 }
 
@@ -90,8 +98,12 @@ function detachActiveListeners() {
 }
 
 watch(activeArea, async (newVal, oldVal) => {
-  if (newVal && !oldVal) attachActiveListeners();
-  else if (!newVal && oldVal) detachActiveListeners();
+  if (newVal && !oldVal) {
+    attachActiveListeners();
+  }
+  else if (!newVal && oldVal) {
+    detachActiveListeners();
+  }
   await nextTick();
   updateRect();
 });
@@ -115,7 +127,9 @@ const MARGIN = 12;
 // actual popover max-height (60vh) instead of a hardcoded 200px so tall
 // content flips above when it should.
 const style = computed(() => {
-  if (!rect.value || viewport.value.h === 0) return { display: 'none' as const };
+  if (!rect.value || viewport.value.h === 0) {
+    return { display: 'none' as const };
+  }
   const r = rect.value;
   const v = viewport.value;
   const maxH = v.h * POPOVER_MAX_VH;

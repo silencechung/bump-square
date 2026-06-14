@@ -49,14 +49,18 @@ interface SaveRecord extends SaveMeta {
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fileFor(id: string): string | null {
-  if (!ID_RE.test(id)) return null;
+  if (!ID_RE.test(id)) {
+    return null;
+  }
   return resolve(SAVES_DIR, `${id}.json`);
 }
 
 /** List saves (metadata only), newest first. */
 export function listSaves(): SaveMeta[] {
   try {
-    if (!existsSync(SAVES_DIR)) return [];
+    if (!existsSync(SAVES_DIR)) {
+      return [];
+    }
     return readdirSync(SAVES_DIR)
       .filter(f => f.endsWith('.json'))
       .map(f => {
@@ -81,7 +85,9 @@ export function createSave(name: string, state: WorkspaceState): SaveMeta {
   mkdirSync(SAVES_DIR, { recursive: true });
   const id = uuid();
   const target = fileFor(id);
-  if (!target) throw new Error('createSave: generated id failed validation');
+  if (!target) {
+    throw new Error('createSave: generated id failed validation');
+  }
   const meta: SaveMeta = { id, name: name.trim() || 'Untitled', savedAt: Date.now(), path: target };
   // Deep clone so later board mutations don't bleed into the saved snapshot.
   const board: BoardState = {
@@ -103,7 +109,9 @@ export function createSave(name: string, state: WorkspaceState): SaveMeta {
  * resolve / the file is gone. Atomic write (tmp + rename) matches createSave. */
 export function updateSave(id: string, state: WorkspaceState, name?: string): SaveMeta | null {
   const target = fileFor(id);
-  if (!target || !existsSync(target)) return null;
+  if (!target || !existsSync(target)) {
+    return null;
+  }
   try {
     const existing = JSON.parse(readFileSync(target, 'utf8')) as SaveRecord;
     const meta: SaveMeta = {
@@ -133,7 +141,9 @@ export function updateSave(id: string, state: WorkspaceState, name?: string): Sa
 export function loadSave(id: string): BoardState | null {
   try {
     const f = fileFor(id);
-    if (!f || !existsSync(f)) return null;
+    if (!f || !existsSync(f)) {
+      return null;
+    }
     const rec = JSON.parse(readFileSync(f, 'utf8')) as SaveRecord;
     return rec.state ?? null;
   } catch {
@@ -145,7 +155,9 @@ export function loadSave(id: string): BoardState | null {
 export function deleteSave(id: string): void {
   try {
     const f = fileFor(id);
-    if (f && existsSync(f)) unlinkSync(f);
+    if (f && existsSync(f)) {
+      unlinkSync(f);
+    }
   } catch {
     /* ignore */
   }

@@ -20,7 +20,9 @@ const { annotationMode, activeArea, open } = useAnnotations();
  * delay; doesn't move the dot or change layout. */
 const animationDelay = computed(() => {
   let h = 0;
-  for (let i = 0; i < props.area.length; i++) h = (h * 31 + props.area.charCodeAt(i)) | 0;
+  for (let i = 0; i < props.area.length; i++) {
+    h = (h * 31 + props.area.charCodeAt(i)) | 0;
+  }
   return `${((h % 8) + 8) % 8 * 100}ms`;
 });
 </script>

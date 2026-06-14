@@ -106,7 +106,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
 
     // Auto-advance the workflow as server state fills in.
-    if (s.sourceImage && step.value === 'upload') step.value = 'layout';
+    if (s.sourceImage && step.value === 'upload') {
+      step.value = 'layout';
+    }
   }
 
   // Locale toggle: dispatch to server, which writes config.json + re-broadcasts.
@@ -138,7 +140,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   let es: EventSource | null = null;
   function connect() {
-    if (es) return;
+    if (es) {
+      return;
+    }
     es = new EventSource('/api/events');
     es.addEventListener('state', (e) => applyServerState(JSON.parse((e as MessageEvent).data)));
     es.onopen = () => { connected.value = true; };
@@ -172,7 +176,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // Duplicate a frame + its contained frames; select the new copy afterwards.
   async function duplicateFrame(id: string) {
     const r = await dispatch('duplicateFrame', { id });
-    if (r?.id) selectedSquareId.value = r.id;
+    if (r?.id) {
+      selectedSquareId.value = r.id;
+    }
     return r?.id;
   }
   // Move a frame + its contained frames by (dx, dy) image units (commit once).
@@ -180,7 +186,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // Paste a frame group so the source top-left lands at (x, y); cut removes original.
   async function pasteFrame(sourceId: string, x: number, y: number, cut: boolean) {
     const r = await dispatch('pasteFrame', { sourceId, x, y, cut });
-    if (r?.id) selectedSquareId.value = r.id;
+    if (r?.id) {
+      selectedSquareId.value = r.id;
+    }
     return r?.id;
   }
   const undo = () => dispatch('undo');
@@ -194,7 +202,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // --- Named saves ---
   async function refreshSaves() {
     const r = await dispatch('listSaves');
-    if (r?.saves) saves.value = r.saves;
+    if (r?.saves) {
+      saves.value = r.saves;
+    }
   }
   async function saveCurrent(name: string) {
     await dispatch('saveState', { name });
@@ -215,7 +225,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const loadSave = (id: string) => dispatch('loadState', { id });
   async function removeSave(id: string) {
     const r = await dispatch('deleteSave', { id });
-    if (r?.saves) saves.value = r.saves;
+    if (r?.saves) {
+      saves.value = r.saves;
+    }
   }
 
   // Spawn claude --print for a given kind. Streams to /api/terminal/events.
@@ -244,9 +256,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // Install the bump-layout skill, then retry the deferred runClaude call.
   async function installSkillAndRetry() {
     const pending = skillMissing.value;
-    if (!pending) return;
+    if (!pending) {
+      return;
+    }
     const res = await fetch('/api/install-skill', { method: 'POST' });
-    if (!res.ok) return;
+    if (!res.ok) {
+      return;
+    }
     skillMissing.value = null;
     await runClaude(pending.kind);
   }

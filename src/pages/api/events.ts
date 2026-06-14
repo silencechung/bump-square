@@ -37,7 +37,9 @@ export const GET: APIRoute = async () => {
     },
     cancel() {
       unsubscribe?.();
-      if (heartbeat) clearInterval(heartbeat);
+      if (heartbeat) {
+        clearInterval(heartbeat);
+      }
     },
   });
 

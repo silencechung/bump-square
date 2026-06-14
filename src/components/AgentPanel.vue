@@ -29,9 +29,13 @@ function fmtTime(ts: number) {
 }
 
 function fmtDuration(startedAt: number, completedAt: number | null): string | null {
-  if (completedAt === null) return null;
+  if (completedAt === null) {
+    return null;
+  }
   const ms = completedAt - startedAt;
-  if (ms < 1000) return `${ms}ms`;
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
   return `${(ms / 1000).toFixed(1)}s`;
 }
 

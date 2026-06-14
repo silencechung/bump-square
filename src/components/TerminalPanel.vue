@@ -24,7 +24,9 @@ let es: EventSource | null = null;
 let ro: ResizeObserver | null = null;
 
 async function initTerminal() {
-  if (!containerRef.value || term) return;
+  if (!containerRef.value || term) {
+    return;
+  }
 
   const { Terminal } = await import('@xterm/xterm');
   const { FitAddon } = await import('@xterm/addon-fit');
@@ -50,10 +52,14 @@ async function initTerminal() {
 }
 
 function connectSSE() {
-  if (es) return;
+  if (es) {
+    return;
+  }
   es = new EventSource('/api/terminal/events');
   es.addEventListener('chunk', (e) => {
-    if (!term) return;
+    if (!term) {
+      return;
+    }
     try {
       const text = decodeURIComponent(escape(atob((e as MessageEvent).data)));
       term.write(text);
@@ -78,14 +84,18 @@ watch(() => props.open, async (isOpen) => {
     } else {
       fitAddon?.fit();
     }
-    if (!es) connectSSE();
+    if (!es) {
+      connectSSE();
+    }
   } else {
     disconnectSSE();
   }
 }, { immediate: false });
 
 onMounted(async () => {
-  if (props.open) await initTerminal();
+  if (props.open) {
+    await initTerminal();
+  }
 });
 
 onUnmounted(() => {

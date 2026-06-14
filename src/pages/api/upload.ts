@@ -13,7 +13,9 @@ const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/g
  * reference (url + filename) is stored in the workspace state. */
 export const POST: APIRoute = async ({ request }) => {
   try {
-    if (crossOriginBlocked(request)) return json({ error: 'cross-origin blocked' }, 403);
+    if (crossOriginBlocked(request)) {
+      return json({ error: 'cross-origin blocked' }, 403);
+    }
 
     const body = await request.json() as {
       base64: string;      // raw base64 (no data: prefix)

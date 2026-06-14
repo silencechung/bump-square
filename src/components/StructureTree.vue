@@ -21,7 +21,9 @@ const collapsed = ref(false);
 const hasChildren = computed(() => !!(props.node.children && props.node.children.length));
 
 function focusFrame() {
-  if (!props.node.squareId) return;
+  if (!props.node.squareId) {
+    return;
+  }
   store.selectedSquareId = props.node.squareId;
   store.step = 'layout';
 }

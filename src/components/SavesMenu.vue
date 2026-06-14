@@ -30,12 +30,16 @@ const canConfirm = computed(() => saveAsName.value.trim() !== '' && !isDuplicate
 
 function toggle() {
   open.value = !open.value;
-  if (open.value) store.refreshSaves();
+  if (open.value) {
+    store.refreshSaves();
+  }
 }
 
 async function save() {
   const n = name.value.trim();
-  if (!n) return;
+  if (!n) {
+    return;
+  }
   await store.saveCurrent(n);
   name.value = '';
   open.value = false;
@@ -55,7 +59,9 @@ function openSaveAs() {
 }
 
 async function confirmSaveAs() {
-  if (!canConfirm.value) return;
+  if (!canConfirm.value) {
+    return;
+  }
   await store.saveCurrent(saveAsName.value.trim());
   showSaveAs.value = false;
   saveAsName.value = '';

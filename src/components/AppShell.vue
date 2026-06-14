@@ -73,7 +73,9 @@ const busy = computed(() => store.runningKind !== null);
 const latestSave = computed(() => store.saves[0] ?? null);
 const copyFeedback = ref(false);
 async function copyLatestSavePath() {
-  if (!latestSave.value) return;
+  if (!latestSave.value) {
+    return;
+  }
   try {
     await navigator.clipboard.writeText(latestSave.value.path);
     copyFeedback.value = true;
@@ -137,8 +139,12 @@ function onResetClick() {
 }
 
 function canVisit(s: string): boolean {
-  if (s === 'upload') return true;
-  if (s === 'structure') return hasStructure.value;
+  if (s === 'upload') {
+    return true;
+  }
+  if (s === 'structure') {
+    return hasStructure.value;
+  }
   return !!store.sourceImage;
 }
 </script>

@@ -41,11 +41,15 @@ async function handleFile(file: File) {
  * otherwise the new image is swapped in under the existing frames. */
 async function commitPending(clear: boolean) {
   const p = pending.value;
-  if (!p) return;
+  if (!p) {
+    return;
+  }
   pending.value = null;
   uploading.value = true;
   try {
-    if (clear) await store.reset();
+    if (clear) {
+      await store.reset();
+    }
     await store.uploadImage(p.base64, p.mediaType, p.width, p.height);
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to upload image';
@@ -62,14 +66,18 @@ function cancelPending() {
 function onDrop(e: DragEvent) {
   isDragging.value = false;
   const file = e.dataTransfer?.files[0];
-  if (file) handleFile(file);
+  if (file) {
+    handleFile(file);
+  }
 }
 
 function onFileInput(e: Event) {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = ''; // allow re-selecting the same file after cancel
-  if (file) handleFile(file);
+  if (file) {
+    handleFile(file);
+  }
 }
 
 function fileToDataUrl(file: File): Promise<string> {

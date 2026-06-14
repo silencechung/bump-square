@@ -66,7 +66,9 @@ const DEFAULTS: BumpSquareConfig = {
 /** Read config.json if present and merge over defaults. Never throws — a bad
  * config file falls back to defaults so the app keeps working. */
 export function loadConfig(): BumpSquareConfig {
-  if (!existsSync(CONFIG_PATH)) return DEFAULTS;
+  if (!existsSync(CONFIG_PATH)) {
+    return DEFAULTS;
+  }
   try {
     const raw = readFileSync(CONFIG_PATH, 'utf8');
     const user = JSON.parse(raw) as Partial<BumpSquareConfig>;
@@ -84,7 +86,9 @@ export function loadConfig(): BumpSquareConfig {
  * unrelated user overrides intact (e.g. claude.model). Atomic-ish: writes
  * to tmp + rename so a crash mid-write can't leave a half-file. */
 export function saveLocale(locale: Locale): void {
-  if (!isLocale(locale)) throw new Error(`Invalid locale: ${String(locale)}`);
+  if (!isLocale(locale)) {
+    throw new Error(`Invalid locale: ${String(locale)}`);
+  }
   let current: Partial<BumpSquareConfig> = {};
   if (existsSync(CONFIG_PATH)) {
     try {
@@ -106,6 +110,8 @@ export function claudeArgsFromConfig(cfg: ClaudeConfig): string[] {
     '--output-format', cfg.outputFormat,
     '--allowedTools', cfg.allowedTools.join(','),
   ];
-  if (cfg.verbose) args.push('--verbose');
+  if (cfg.verbose) {
+    args.push('--verbose');
+  }
   return args;
 }
