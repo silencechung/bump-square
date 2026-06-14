@@ -15,10 +15,10 @@ const PROMPTS: Record<string, (state: ReturnType<typeof getState>) => string> = 
     const frameCount = s.squares.length;
     return `/bump-layout
 workspace: ${workspacePath}
-忽略 Frame 位置些微重疊的問題 — 使用者在小尺寸截圖上不好精準拉線,只要看起來像「在裡面」就視為 containment;邊緣外推幾個 px 也算包含。
+判斷 containment 時容忍幾個 px 的偏差(使用者在小尺寸截圖上不好精準拉線) — 但這個容差**只是內部判斷依據,不要寫進輸出的 prompt / tree 裡**。最終 markdown 的節點說明只描述「這是什麼元件、它的意圖」,不要出現座標、x/y 數字、或「幾何上 / x≈xxx」這種字眼。
 目前有 ${frameCount} 個 Frame。
-依各 Frame 的 containment（包含關係）與 comment（使用者意圖）產生意圖結構樹。
-完成後更新 workspace.json 的 structure 欄位（tree + prompt）。`;
+依各 Frame 的 containment(包含關係)與 comment(使用者意圖)產生意圖結構樹。
+完成後更新 workspace.json 的 structure 欄位(tree + prompt)。`;
   },
   'suggest-assets': (_s) =>
     `/bump-layout
