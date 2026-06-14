@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { v4 as uuid } from 'uuid';
-import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, clearAgentNotes } from '../../lib/serverState';
+import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, clearAgentEvents } from '../../lib/serverState';
 import { listSaves, createSave, loadSave, deleteSave, updateSave } from '../../lib/saveStore';
 import { crossOriginBlocked } from '../../lib/guard';
 import type { Square } from '../../types';
@@ -92,8 +92,8 @@ export const POST: APIRoute = async ({ request }) => {
         });
         break;
 
-      case 'clearAgentNotes':
-        clearAgentNotes();
+      case 'clearAgentEvents':
+        clearAgentEvents();
         break;
 
       case 'reset':

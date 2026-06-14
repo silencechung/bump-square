@@ -4,7 +4,14 @@ import type { Asset, Square, StructureNode, WorkflowStep } from '../types';
 import type { Viewport } from '../lib/viewport';
 
 interface SourceImage { url: string; filename: string; mediaType: string; width: number; height: number }
-interface AgentNote { id: string; text: string; timestamp: number }
+interface AgentEvent {
+  id: string;
+  kind: string;
+  startedAt: number;
+  completedAt: number | null;
+  exitCode: number | null;
+  summary: string | null;
+}
 interface SaveMeta { id: string; name: string; savedAt: number; path: string }
 
 interface ServerState {
@@ -12,7 +19,7 @@ interface ServerState {
   assets: Asset[];
   squares: Square[];
   structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
-  agentNotes: AgentNote[];
+  agentEvents: AgentEvent[];
   /** The save the live workspace was loaded from, if any. Powers SavesMenu's
    * "Save (overwrite)" vs "Save As (new)" branch. */
   currentSaveId: string | null;
@@ -32,7 +39,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const assets = ref<Asset[]>([]);
   const squares = ref<Square[]>([]);
   const structure = ref<{ tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null }>({ tree: null, prompt: null, assetsPrompt: null });
-  const agentNotes = ref<AgentNote[]>([]);
+  const agentEvents = ref<AgentEvent[]>([]);
   const currentSaveId = ref<string | null>(null);
 
   // --- Local-only UI state ---
@@ -65,7 +72,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     assets.value = s.assets;
     squares.value = s.squares;
     structure.value = s.structure;
-    agentNotes.value = s.agentNotes;
+    agentEvents.value = s.agentEvents;
     currentSaveId.value = s.currentSaveId ?? null;
     canUndo.value = s.canUndo ?? false;
     canRedo.value = s.canRedo ?? false;
@@ -127,7 +134,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const updateAsset = (id: string, patch: Partial<Asset>) => dispatch('updateAsset', { id, patch });
   const removeAsset = (id: string) => dispatch('removeAsset', { id });
   const reset = () => dispatch('reset');
-  const clearAgentNotes = () => dispatch('clearAgentNotes');
+  const clearAgentEvents = () => dispatch('clearAgentEvents');
 
   // --- Named saves ---
   async function refreshSaves() {
@@ -197,14 +204,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const setRunningKind = (k: string | null) => { runningKind.value = k; };
 
   return {
-    sourceImage, assets, squares, structure, agentNotes,
+    sourceImage, assets, squares, structure, agentEvents,
     step, selectedAssetId, selectedSquareId, connected, runningKind, terminalRunning, skillMissing, saves, currentSaveId, canUndo, canRedo,
     viewport, setViewport,
     selectedAsset, selectedSquare, currentSave,
     connect,
     uploadImage, addSquare, updateSquare, removeSquare, duplicateFrame,
     moveFrameGroup, pasteFrame, undo, redo,
-    placeAssetInSquare, updateAsset, removeAsset, reset, clearAgentNotes,
+    placeAssetInSquare, updateAsset, removeAsset, reset, clearAgentEvents,
     runClaude, setRunningKind, installSkillAndRetry, dismissSkillMissing,
     refreshSaves, saveCurrent, updateCurrentSave, loadSave, removeSave,
   };

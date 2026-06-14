@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { loadConfig, claudeArgsFromConfig } from './config';
+import { addAgentEvent, completeAgentEvent } from './serverState';
 
 const MAX_BUFFER_LINES = 10000;
 
@@ -133,6 +134,15 @@ function formatStreamEvent(line: string): string | null {
 export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
   return new Promise((resolve, reject) => {
     const task = () => {
+      // Open an AgentEvent row before we even spawn — the panel shows the
+      // running spinner immediately, and a spawn-error case still has a row
+      // to mark as failed.
+      const eventId = addAgentEvent(kind);
+      // Track the last assistant-text block so we can stamp it as the
+      // event's summary on close (the agent prints a Chinese one-liner
+      // recap as its final assistant message per /bump-layout skill rules).
+      let lastAssistantText: string | null = null;
+
       g.__bumpClaudeRunning = true;
       g.__bumpClaudeRunningKind = kind;
       bus.emit('start', kind);
@@ -177,6 +187,22 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
               }
             } catch { /* fall through to formatter */ }
           }
+          // Sniff each line for assistant.text blocks — the LAST one we see
+          // wins as the event summary. Parse failures are silently skipped
+          // (formatStreamEvent will also try its own parse below).
+          try {
+            const ev = JSON.parse(line) as {
+              type?: string;
+              message?: { content?: Array<Record<string, unknown>> };
+            };
+            if (ev.type === 'assistant') {
+              for (const block of ev.message?.content ?? []) {
+                if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+                  lastAssistantText = block.text.trim();
+                }
+              }
+            }
+          } catch { /* ignore */ }
           const out = formatStreamEvent(line);
           if (out) pushChunk(out);
         }
@@ -188,6 +214,7 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
           ? `\r\n\x1b[32m✓ done (exit 0)\x1b[0m\r\n`
           : `\r\n\x1b[31m✗ exit ${code}\x1b[0m\r\n`;
         pushChunk(msg);
+        completeAgentEvent(eventId, code ?? -1, lastAssistantText);
         g.__bumpClaudeRunning = false;
         g.__bumpClaudeRunningKind = null;
         bus.emit('done', code);
@@ -197,6 +224,7 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
 
       child.on('error', (err) => {
         pushChunk(`\r\n\x1b[31m⚠ spawn error: ${err.message}\x1b[0m\r\n`);
+        completeAgentEvent(eventId, -1, `spawn error: ${err.message}`);
         g.__bumpClaudeRunning = false;
         g.__bumpClaudeRunningKind = null;
         bus.emit('done', -1);

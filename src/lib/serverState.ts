@@ -15,12 +15,25 @@ import type { Asset, Square, StructureNode } from '../types';
  *
  * The disk file IS the truth across process restarts.
  */
+/** One row in the AGENT panel's history log. Captures every `claude --print`
+ * trigger from the UI's AI buttons + its completion state + the agent's final
+ * assistant line as a summary. Live xterm streaming still happens in the
+ * TerminalPanel; this is the at-a-glance history, not the conversation. */
+export interface AgentEvent {
+  id: string;
+  kind: string;            // 'generate-structure' | 'suggest-assets' | …
+  startedAt: number;
+  completedAt: number | null;
+  exitCode: number | null; // 0 = ok, non-zero / -1 = failed
+  summary: string | null;  // last assistant text block, used as the row's blurb
+}
+
 export interface WorkspaceState {
   sourceImage: { url: string; filename: string; mediaType: string; width: number; height: number } | null;
   assets: Asset[];
   squares: Square[];
   structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
-  agentNotes: { id: string; text: string; timestamp: number }[];
+  agentEvents: AgentEvent[];
   /** The save the live workspace originated from (if loaded via SavesMenu).
    * Used so the menu can offer "Save" (overwrite this one) vs "Save As"
    * (always new). Cleared on upload-new-image / reset. Workspace metadata,
@@ -35,7 +48,7 @@ function emptyState(): WorkspaceState {
     assets: [],
     squares: [],
     structure: { tree: null, prompt: null, assetsPrompt: null },
-    agentNotes: [],
+    agentEvents: [],
     currentSaveId: null,
   };
 }
@@ -60,7 +73,7 @@ function loadFromDisk(): WorkspaceState | null {
 }
 
 // Survive Astro dev HMR by stashing on globalThis; load from disk on cold start.
-/** Board-only slice that undo/redo snapshots (the agentNotes log is
+/** Board-only slice that undo/redo snapshots (the agentEvents log is
  * intentionally NOT part of history, so undoing an edit doesn't wipe notes). */
 type BoardSnapshot = Pick<WorkspaceState, 'sourceImage' | 'assets' | 'squares' | 'structure'>;
 
@@ -187,16 +200,40 @@ export function onChange(listener: (s: WorkspaceState) => void): () => void {
   return () => bus.off('change', listener);
 }
 
-export function addAgentNote(text: string) {
+/** Record the start of a `claude --print` run. Returns the new event id so the
+ * caller can call completeAgentEvent on it when the child closes. Caps the
+ * log at 50 entries (drops oldest). */
+export function addAgentEvent(kind: string): string {
+  const id = uuid();
   mutate(s => {
-    s.agentNotes.push({ id: uuid(), text, timestamp: Date.now() });
-    if (s.agentNotes.length > 50) s.agentNotes.shift();
+    s.agentEvents.push({
+      id, kind,
+      startedAt: Date.now(),
+      completedAt: null,
+      exitCode: null,
+      summary: null,
+    });
+    if (s.agentEvents.length > 50) s.agentEvents.shift();
+  }, { history: false });
+  return id;
+}
+
+/** Mark an in-flight event as done with its exit code + optional summary
+ * (typically the agent's last assistant text line). Silently no-ops if the
+ * event was already pruned. */
+export function completeAgentEvent(id: string, exitCode: number, summary: string | null) {
+  mutate(s => {
+    const ev = s.agentEvents.find(e => e.id === id);
+    if (!ev) return;
+    ev.completedAt = Date.now();
+    ev.exitCode = exitCode;
+    if (summary) ev.summary = summary;
   }, { history: false });
 }
 
-/** Clear the agent message log (UI-side housekeeping; doesn't touch board state). */
-export function clearAgentNotes() {
-  mutate(s => { s.agentNotes = []; }, { history: false });
+/** Clear the agent event log (UI-side housekeeping; doesn't touch board state). */
+export function clearAgentEvents() {
+  mutate(s => { s.agentEvents = []; }, { history: false });
 }
 
 /** Every frame geometrically contained fully within `src` (its whole nested
@@ -280,7 +317,7 @@ export function resetState() {
 }
 
 /** Replace the live BOARD with a loaded snapshot (named save). The
- * agentNotes session log is deliberately left untouched — saves don't carry
+ * agentEvents session log is deliberately left untouched — saves don't carry
  * it, and loading one shouldn't wipe the current log.
  *
  * Defensive: if the snapshot's sourceImage refers to a file that no longer
