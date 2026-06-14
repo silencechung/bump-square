@@ -1,17 +1,17 @@
 # bump-square feature backlog
 
-> Rules:
-> - When the user says `feature: XXX`, append it to `## pending`.
-> - At idle / end-of-task moments, suggest one item from `## pending` to pick up next.
-> - When done, move the item to `## done` with the related commit / PR.
+> 規則:
+> - 使用者說 `feature: XXX` → 直接 append 到 `## pending`。
+> - 空檔 / 任務收尾時 → 從 `## pending` 挑一條建議下一步開工。
+> - 完成 → 移到 `## done`,附上 commit / PR。
 
 ## pending
 
-- **#3 i18n (en + zh-TW)** — restructure `src/content/help/*.md` as `help/<locale>/*.md`; have the Annotation help popover resolve content by locale. `src/components/AnnotationOverlay.vue:6` already has a marker comment ("When task #3 (i18n) lands…") pointing at the planned API.
-- **#4 Desktop app vs lockfile (discussion)** — scoping discussion: should bump-square ship as a desktop app (Tauri / Electron), or stay dev-server-only? Decide direction before any implementation.
-- **#6 Custom prompt 附註 (per-frame extra prompt)** — a small freeform note per Frame that gets injected into the `generate-structure` prompt. Earlier attempt was started then reverted pending priority.
-- **Gemini support (parked)** — add a second model provider. Deferred because the Gemini CLI looks like it's heading toward deprecation. When revived, evaluate "direct Gemini API server-side transform" first; **do not** spawn `gemini-cli`.
+- **#3 i18n (en + zh-TW)** — 把 `src/content/help/*.md` 改成 `help/<locale>/*.md`,Annotation help popover 依 locale 解析。`src/components/AnnotationOverlay.vue:6` 已有 marker comment 標記「When task #3 (i18n) lands…」。
+- **#4 Desktop app vs lockfile(scoping discussion)** — bump-square 要不要包成 desktop app(Tauri / Electron),還是維持 dev-server-only。先確認方向再開工。
+- **#6 Custom prompt 附註(per-frame extra prompt)** — 每個 Frame 一個 freeform 附註,會被注入 `generate-structure` 的 prompt。先前起頭過、reverted pending priority。
+- **Gemini support(parked)** — 加第二個 model provider。延後因為 Gemini CLI 看起來要 deprecation。重啟時優先評估「直接打 Gemini API server-side transform」路徑,**不要** spawn `gemini-cli`。
 
 ## done
 
-(empty — completed items move here with commit / PR.)
+(完成項目移到這,附 commit / PR。)
