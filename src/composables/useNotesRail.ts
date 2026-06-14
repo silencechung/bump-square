@@ -47,6 +47,13 @@ export function useNotesRail(store: Store, bodyRef: Ref<HTMLDivElement | null>, 
     if (!id || !railAnchor.value) {
       return null;
     }
+    // When the hovered row IS the selected one, selectedLeaderLine is
+    // already drawing this exact connection — rendering hover on top
+    // doubles the dashes visually (different dash pattern + colour, but
+    // sharing endpoints so the two stack as a visible "double line").
+    if (id === store.selectedSquareId) {
+      return null;
+    }
     const sq = store.squares.find(s => s.id === id);
     if (!sq) {
       return null;

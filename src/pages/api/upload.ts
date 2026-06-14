@@ -36,6 +36,10 @@ export const POST: APIRoute = async ({ request }) => {
         width: body.width,
         height: body.height,
       };
+      // Fresh upload = start of a NEW workspace. Clear any "linked save"
+      // marker so the next Save creates a new entry rather than overwriting
+      // whatever was previously loaded.
+      s.currentSaveId = null;
     });
 
     // Drop any previously uploaded images that are no longer referenced.

@@ -127,7 +127,15 @@ export function useFrameInteractions(
       startPan(e);
       return;
     }
-    if (drawMode.value || e.button !== 0) {
+    // Frame mode on + press on an existing frame = start drawing a NESTED
+    // frame. The template uses @mousedown.stop on each frame, which would
+    // otherwise swallow the press before canvas-level onMouseDown could run.
+    // Delegating keeps the draw-start logic in one place.
+    if (drawMode.value && e.button === 0) {
+      onMouseDown(e);
+      return;
+    }
+    if (e.button !== 0) {
       return;
     }
     store.selectedSquareId = sq.id;
