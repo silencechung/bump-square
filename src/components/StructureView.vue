@@ -58,6 +58,26 @@ function copyHandoff() {
       <AnnotationDot area="structure-view" pos="-top-1 left-[148px]" />
     </div>
 
+    <!-- Stale-snapshot banner. structure.prompt is a server-stamped snapshot;
+         any board edit bumps `boardVersion` past `structure.promptVersion` and
+         this banner appears. Two independent signals (Prompt vs Assets prompt)
+         are surfaced together so the user knows which agent action to re-run. -->
+    <div
+      v-if="store.isPromptStale || store.isAssetsPromptStale"
+      class="rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 flex items-start gap-2 text-sm text-amber-100"
+    >
+      <span class="i-lucide-triangle-alert text-amber-300 text-base mt-0.5 shrink-0" />
+      <div class="flex-1 leading-snug">
+        <div class="font-medium text-amber-200">
+          下面這份 spec 跟現在的 Frame 不一致
+        </div>
+        <div class="text-xs text-amber-100/80 mt-0.5">
+          <span v-if="store.isPromptStale">結構 / Prompt 已過期 — 按 header 的「🧩 產生結構」重新產生。</span>
+          <span v-if="store.isAssetsPromptStale">Assets prompt 已過期 — 按「✨ 生成 assets prompt」重新產生。</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Three tabs over one pane: Tree (visual) · JSON (raw) · Prompt (the
          console-tree handoff sent to the dev agent). -->
     <div class="flex-1 flex flex-col overflow-hidden">

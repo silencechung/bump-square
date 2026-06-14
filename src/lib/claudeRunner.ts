@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { loadConfig, claudeArgsFromConfig } from './config';
-import { addAgentEvent, completeAgentEvent } from './serverState';
+import { addAgentEvent, completeAgentEvent, getState, stampStructureVersion } from './serverState';
 
 const MAX_BUFFER_LINES = 10000;
 
@@ -142,6 +142,10 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
       // event's summary on close (the agent prints a Chinese one-liner
       // recap as its final assistant message per /bump-layout skill rules).
       let lastAssistantText: string | null = null;
+      // Capture the board version at spawn time so the version stamp written
+      // on success reflects the world the agent actually read — not the world
+      // at completion (which may have shifted if the user kept editing).
+      const tSpawn = getState().boardVersion;
 
       g.__bumpClaudeRunning = true;
       g.__bumpClaudeRunningKind = kind;
@@ -215,6 +219,17 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
           : `\r\n\x1b[31m✗ exit ${code}\x1b[0m\r\n`;
         pushChunk(msg);
         completeAgentEvent(eventId, code ?? -1, lastAssistantText);
+        // Stamp the version against `tSpawn` (the boardVersion at spawn time)
+        // so subsequent edits make Prompt show as stale. generate-structure
+        // also clears `assetsPrompt` per the skill — reset its stamp to match.
+        if (code === 0) {
+          if (kind === 'generate-structure') {
+            stampStructureVersion('prompt', tSpawn);
+            stampStructureVersion('assets', null);
+          } else if (kind === 'suggest-assets') {
+            stampStructureVersion('assets', tSpawn);
+          }
+        }
         g.__bumpClaudeRunning = false;
         g.__bumpClaudeRunningKind = null;
         bus.emit('done', code);

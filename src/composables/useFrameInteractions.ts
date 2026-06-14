@@ -40,9 +40,11 @@ export function useFrameInteractions(
   const drawStart = ref<Point>({ x: 0, y: 0 });
   const drawCurrent = ref<{ x: number; y: number; width: number; height: number } | null>(null);
 
-  // --- Pan (✋ hand tool, holding Space, or middle mouse button) ---
+  // --- Pan (default Hand mode, holding Space, or middle mouse button) ---
+  // Hand mode is the implicit default whenever Frame mode is off — the toolbar
+  // exposes a single Frame toggle now, so `handMode` is just the inverse of
+  // `drawMode` (kept as a derived getter below for legacy call sites).
   const spaceDown = ref(false);
-  const handMode = ref(false);
   const panning = ref(false);
   const panLast = ref<Point>({ x: 0, y: 0 });
 
@@ -115,29 +117,7 @@ export function useFrameInteractions(
     );
   }
 
-  function onFrameMouseDown(sq: Square, e: MouseEvent) {
-    // In place mode, a click drops the pasted group — handle that first.
-    if (placing.value) {
-      dropPlacement(e);
-      return;
-    }
-    // Pan modes take precedence even when the press starts on a frame.
-    if (e.button === 1 || (e.button === 0 && (spaceDown.value || handMode.value))) {
-      e.preventDefault();
-      startPan(e);
-      return;
-    }
-    // Frame mode on + press on an existing frame = start drawing a NESTED
-    // frame. The template uses @mousedown.stop on each frame, which would
-    // otherwise swallow the press before canvas-level onMouseDown could run.
-    // Delegating keeps the draw-start logic in one place.
-    if (drawMode.value && e.button === 0) {
-      onMouseDown(e);
-      return;
-    }
-    if (e.button !== 0) {
-      return;
-    }
+  function startMove(sq: Square, e: MouseEvent) {
     store.selectedSquareId = sq.id;
     store.selectedAssetId = null;
     const group = [sq, ...framesInsideClient(sq)];
@@ -145,7 +125,48 @@ export function useFrameInteractions(
     for (const g of group) {
       origin[g.id] = { x: g.x, y: g.y };
     }
-    moving.value = { id: sq.id, origin, start: screenToImage(toCanvasCoords(e), vp.value), dx: 0, dy: 0, moved: false };
+    moving.value = {
+      id: sq.id,
+      origin,
+      start: screenToImage(toCanvasCoords(e), vp.value),
+      dx: 0,
+      dy: 0,
+      moved: false,
+    };
+  }
+
+  function onFrameMouseDown(sq: Square, e: MouseEvent) {
+    // In place mode, a click drops the pasted group — handle that first.
+    if (placing.value) {
+      dropPlacement(e);
+      return;
+    }
+    // Pan escape hatches (Space-drag / middle button) win even on a frame.
+    if (e.button === 1 || (e.button === 0 && spaceDown.value)) {
+      e.preventDefault();
+      startPan(e);
+      return;
+    }
+    if (e.button !== 0) {
+      return;
+    }
+    // Frame mode: dragging a frame body draws a NESTED frame by default; hold
+    // Ctrl/Cmd to move the frame instead (explicit modifier prevents accidental
+    // moves while drawing). Delegating to onMouseDown keeps draw-start in one
+    // place; the template's @mousedown.stop would otherwise swallow this.
+    if (drawMode.value) {
+      if (e.ctrlKey || e.metaKey) {
+        startMove(sq, e);
+        return;
+      }
+      onMouseDown(e);
+      return;
+    }
+    // Hand mode (default): pan the canvas even when the press starts on a
+    // frame — Hand is a pure navigation tool. The @click handler still fires
+    // on a press without drag, so click-to-select keeps working. Moving a
+    // frame requires Frame mode + Ctrl-drag (the single move path).
+    startPan(e);
   }
 
   function copySelected(cut: boolean) {
@@ -164,7 +185,6 @@ export function useFrameInteractions(
       return;
     }
     drawMode.value = false;
-    handMode.value = false;
     placing.value = true;
     placeCursor.value = null;
   }
@@ -263,18 +283,25 @@ export function useFrameInteractions(
       dropPlacement(e);
       return;
     }
-    // Middle button, space+drag, or the ✋ hand tool = pan, regardless of mode.
-    if (e.button === 1 || (e.button === 0 && (spaceDown.value || handMode.value))) {
+    // Middle button or Space+drag = pan, regardless of mode (escape hatch).
+    if (e.button === 1 || (e.button === 0 && spaceDown.value)) {
       e.preventDefault();
       startPan(e);
       return;
     }
-    if (drawMode.value && e.button === 0) {
+    if (e.button !== 0) {
+      return;
+    }
+    // Frame mode: drag on the empty canvas draws a new top-level frame.
+    if (drawMode.value) {
       drawing.value = true;
       const pos = toCanvasCoords(e);
       drawStart.value = pos;
       drawCurrent.value = { x: pos.x, y: pos.y, width: 0, height: 0 };
+      return;
     }
+    // Hand mode (default): drag on the empty canvas pans.
+    startPan(e);
   }
 
   function onMouseMove(e: MouseEvent) {
@@ -349,19 +376,13 @@ export function useFrameInteractions(
     drawCurrent.value = null;
   }
 
-  // Draw and Hand are mutually exclusive tools — turning one on releases the other.
+  // Frame is the only explicit tool toggle now — Hand mode is the implicit
+  // default whenever Frame is off.
   function toggleDraw() {
     drawMode.value = !drawMode.value;
-    if (drawMode.value) {
-      handMode.value = false;
-    }
   }
-  function toggleHand() {
-    handMode.value = !handMode.value;
-    if (handMode.value) {
-      drawMode.value = false;
-    }
-  }
+  // Derived for backwards-compat with call sites that still read `handMode`.
+  const handMode = computed(() => !drawMode.value);
 
   const canvasCursor = computed(() => {
     if (placing.value) {
@@ -370,10 +391,10 @@ export function useFrameInteractions(
     if (panning.value) {
       return 'grabbing';
     }
-    if (handMode.value || spaceDown.value) {
+    if (spaceDown.value) {
       return 'grab';
     }
-    return drawMode.value ? 'crosshair' : 'default';
+    return drawMode.value ? 'crosshair' : 'grab';
   });
 
   return {
@@ -384,7 +405,7 @@ export function useFrameInteractions(
     screenRect, imgStyle, placeGhost, canvasCursor,
     // actions
     startResize, onFrameMouseDown, copySelected, startPlacing, cancelPlacing,
-    toggleDraw, toggleHand,
+    toggleDraw,
     // pointer handlers
     onMouseDown, onMouseMove, onMouseUp, toCanvasCoords,
   };

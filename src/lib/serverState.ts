@@ -32,7 +32,17 @@ export interface WorkspaceState {
   sourceImage: { url: string; filename: string; mediaType: string; width: number; height: number } | null;
   assets: Asset[];
   squares: Square[];
-  structure: { tree: StructureNode | null; prompt: string | null; assetsPrompt: string | null };
+  structure: {
+    tree: StructureNode | null;
+    prompt: string | null;
+    assetsPrompt: string | null;
+    /** `boardVersion` captured at the moment generate-structure was spawned.
+     * UI compares this against the current `boardVersion` to flag the prompt
+     * as out-of-date after any board edit. `null` until the first generation. */
+    promptVersion: number | null;
+    /** Same idea for the agent-authored assets prompt. */
+    assetsPromptVersion: number | null;
+  };
   agentEvents: AgentEvent[];
   /** The save the live workspace originated from (if loaded via SavesMenu).
    * Used so the menu can offer "Save" (overwrite this one) vs "Save As"
@@ -40,6 +50,11 @@ export interface WorkspaceState {
    * not board content — deliberately NOT snapshotted into BoardSnapshot
    * (a saved snapshot doesn't carry its own id; undo doesn't restore it). */
   currentSaveId: string | null;
+  /** Monotonic timetick (`Date.now()`) bumped on every board-affecting
+   * mutation (add/update/remove/move/paste/duplicate frame, asset edits,
+   * undo/redo, reset, save-load). Compared with `structure.*Version` to tell
+   * whether the agent-authored prompt still matches the canvas. */
+  boardVersion: number;
 }
 
 function emptyState(): WorkspaceState {
@@ -47,9 +62,13 @@ function emptyState(): WorkspaceState {
     sourceImage: null,
     assets: [],
     squares: [],
-    structure: { tree: null, prompt: null, assetsPrompt: null },
+    structure: {
+      tree: null, prompt: null, assetsPrompt: null,
+      promptVersion: null, assetsPromptVersion: null,
+    },
     agentEvents: [],
     currentSaveId: null,
+    boardVersion: Date.now(),
   };
 }
 
@@ -141,7 +160,19 @@ scheduleSave();
       try {
         const raw = readFileSync(SAVE_PATH, 'utf8');
         const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
+        // Server is the sole arbiter of version stamps. Preserve in-memory
+        // values so a race between the agent's file write and the runner's
+        // close-handler stamp can never lose them (whichever lands second wins
+        // — for these fields, in-memory always wins).
+        const inMem = {
+          promptVersion: state.structure.promptVersion,
+          assetsPromptVersion: state.structure.assetsPromptVersion,
+          boardVersion: state.boardVersion,
+        };
         Object.assign(state, { ...emptyState(), ...parsed });
+        state.structure.promptVersion = inMem.promptVersion;
+        state.structure.assetsPromptVersion = inMem.assetsPromptVersion;
+        state.boardVersion = inMem.boardVersion;
         bus.emit('change', state);
       } catch { /* mid-write or parse error — skip */ }
     });
@@ -156,12 +187,16 @@ export function getState(): WorkspaceState {
 
 /** Apply a mutation, broadcast to SSE subscribers, then persist to disk.
  *
- * By default a pre-change board snapshot is pushed to the undo stack. Pass
- * `{ history: false }` for changes that should NOT be undoable steps (agent
- * notes/requests log, and the undo/redo restores themselves). */
+ * - `history` (default true): push a pre-change board snapshot onto the undo
+ *   stack. Pass `false` for changes that should NOT be undoable (agent log,
+ *   the undo/redo restores themselves, version stamps).
+ * - `bumpVersion` (default = `history`): tick `state.boardVersion` to
+ *   `Date.now()`. Default tracks `history` so board edits bump and metadata
+ *   changes don't. Undo/redo override with `{ history: false, bumpVersion: true }`
+ *   because they CHANGE the board even though they're not new steps. */
 export function mutate(
   fn: (s: WorkspaceState) => void,
-  opts: { history?: boolean } = {},
+  opts: { history?: boolean; bumpVersion?: boolean } = {},
 ): WorkspaceState {
   if (opts.history !== false) {
     undoStack.push(snapshotBoard(state));
@@ -169,20 +204,34 @@ export function mutate(
     redoStack.length = 0;
   }
   fn(state);
+  const shouldBump = opts.bumpVersion ?? (opts.history !== false);
+  if (shouldBump) state.boardVersion = Date.now();
   bus.emit('change', state);
   scheduleSave();
   return state;
 }
 
+/** Stamp the `structure.<field>Version` to whatever `boardVersion` was when
+ * the agent started. Called by `claudeRunner` on successful completion; not a
+ * board edit itself (no history, no boardVersion bump). */
+export function stampStructureVersion(field: 'prompt' | 'assets', version: number | null) {
+  mutate(s => {
+    if (field === 'prompt') s.structure.promptVersion = version;
+    else s.structure.assetsPromptVersion = version;
+  }, { history: false, bumpVersion: false });
+}
+
 export function canUndo(): boolean { return undoStack.length > 0; }
 export function canRedo(): boolean { return redoStack.length > 0; }
 
-/** Restore the previous board snapshot. Returns false if nothing to undo. */
+/** Restore the previous board snapshot. Returns false if nothing to undo.
+ * Undo is not a history step but it IS a board change, so we bump
+ * boardVersion explicitly (default tracks `history`, which would say "no"). */
 export function undo(): boolean {
   const prev = undoStack.pop();
   if (!prev) return false;
   redoStack.push(snapshotBoard(state));
-  mutate(s => Object.assign(s, prev), { history: false });
+  mutate(s => Object.assign(s, prev), { history: false, bumpVersion: true });
   return true;
 }
 
@@ -191,7 +240,7 @@ export function redo(): boolean {
   const next = redoStack.pop();
   if (!next) return false;
   undoStack.push(snapshotBoard(state));
-  mutate(s => Object.assign(s, next), { history: false });
+  mutate(s => Object.assign(s, next), { history: false, bumpVersion: true });
   return true;
 }
 
@@ -352,5 +401,13 @@ export function replaceState(snapshot: Partial<WorkspaceState>) {
     s.assets = snapshot.assets ?? empty.assets;
     s.squares = snapshot.squares ?? empty.squares;
     s.structure = snapshot.structure ?? empty.structure;
-  });
+    // Loading a save restores the original boardVersion so the snapshot's
+    // freshness verdict (structure.promptVersion vs boardVersion) carries
+    // over — a fresh save loads as fresh, a stale save loads as stale.
+    // Fall back to the prompt's stamp (or now) for legacy saves with no
+    // recorded boardVersion.
+    s.boardVersion = snapshot.boardVersion
+      ?? s.structure.promptVersion
+      ?? Date.now();
+  }, { history: true, bumpVersion: false });
 }
