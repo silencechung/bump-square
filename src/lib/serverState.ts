@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, watch } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { v4 as uuid } from 'uuid';
 import type { Asset, Square, StructureNode } from '../types';
 
@@ -274,11 +274,37 @@ export function resetState() {
 
 /** Replace the live BOARD with a loaded snapshot (named save). The
  * agentNotes session log is deliberately left untouched — saves don't carry
- * it, and loading one shouldn't wipe the current log. */
+ * it, and loading one shouldn't wipe the current log.
+ *
+ * Defensive: if the snapshot's sourceImage refers to a file that no longer
+ * exists in ~/.bump-square/uploads/ (e.g. an upload was renamed or pruned
+ * after the save was taken), clear it instead of carrying forward a broken
+ * reference. UI then shows "no image" rather than a 404'd <img>. */
 export function replaceState(snapshot: Partial<WorkspaceState>) {
   const empty = emptyState();
+  const sourceImage = (() => {
+    if (!snapshot.sourceImage) return empty.sourceImage;
+    // Tampered save files could carry a crafted filename like `../../etc/passwd`.
+    // basename() strips any path components → resolves to .bump-square/uploads/<name>
+    // unconditionally. If basename differs from the raw value, the filename was
+    // path-shaped: reject outright.
+    const raw = snapshot.sourceImage.filename;
+    const safe = basename(raw);
+    if (safe !== raw) {
+      console.warn(`[bump-square] replaceState: rejecting path-shaped sourceImage filename ${JSON.stringify(raw)}`);
+      return empty.sourceImage;
+    }
+    const filePath = resolve(homedir(), '.bump-square', 'uploads', safe);
+    if (!existsSync(filePath)) {
+      console.warn(
+        `[bump-square] replaceState: sourceImage ${safe} is missing on disk, clearing.`,
+      );
+      return empty.sourceImage;
+    }
+    return snapshot.sourceImage;
+  })();
   mutate(s => {
-    s.sourceImage = snapshot.sourceImage ?? empty.sourceImage;
+    s.sourceImage = sourceImage;
     s.assets = snapshot.assets ?? empty.assets;
     s.squares = snapshot.squares ?? empty.squares;
     s.structure = snapshot.structure ?? empty.structure;
