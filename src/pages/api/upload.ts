@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { mutate } from '../../lib/serverState';
-import { saveImage, pruneImages } from '../../lib/imageStore';
-import { crossOriginBlocked } from '../../lib/guard';
+import { mutate } from '~src/lib/serverState';
+import { saveImage, pruneImages } from '~src/lib/imageStore';
+import { crossOriginBlocked } from '~src/lib/guard';
 
 export const prerender = false;
 

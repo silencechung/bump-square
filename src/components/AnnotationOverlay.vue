@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
-import { useAnnotations } from '../composables/useAnnotations';
-import { useLocale, type Locale } from '../composables/useLocale';
+import { useAnnotations } from '~src/composables/useAnnotations';
+import { useT } from '~src/composables/useT';
+import { useWorkspaceStore } from '~src/stores/workspace';
+import { DEFAULT_LOCALE } from '~src/i18n';
 
 // Compile every help/<locale>/*.md into the bundle at build time, keyed as
 // helpByLocale[locale][area]. Missing-locale lookups fall back to zh-TW so
@@ -13,7 +15,6 @@ const helpModules = import.meta.glob('../content/help/**/*.md', {
   import: 'default',
 }) as Record<string, string>;
 
-const FALLBACK_LOCALE: Locale = 'zh-TW';
 const helpByLocale: Record<string, Record<string, string>> = {};
 for (const path of Object.keys(helpModules)) {
   const parts = path.split('/');
@@ -26,7 +27,8 @@ for (const path of Object.keys(helpModules)) {
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
 const { activeArea, close } = useAnnotations();
-const { locale } = useLocale();
+const store = useWorkspaceStore();
+const t = useT();
 
 // Anchor rect of the dot whose area is active. Refreshed on resize/scroll/
 // activeArea change so the popover follows panel resizes or canvas zoom.
@@ -41,8 +43,8 @@ const viewport = ref({ w: 0, h: 0 });
 const html = computed(() => {
   if (!activeArea.value) return '';
   const area = activeArea.value;
-  const raw = helpByLocale[locale.value]?.[area] ?? helpByLocale[FALLBACK_LOCALE]?.[area];
-  return raw ? md.render(raw) : '<p>(missing help content)</p>';
+  const raw = helpByLocale[store.locale]?.[area] ?? helpByLocale[DEFAULT_LOCALE]?.[area];
+  return raw ? md.render(raw) : `<p>${t('annotation.missing')}</p>`;
 });
 
 function updateRect() {

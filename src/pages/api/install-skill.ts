@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { copyFileSync, mkdirSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve, dirname } from 'node:path';
-import { crossOriginBlocked } from '../../lib/guard';
+import { crossOriginBlocked } from '~src/lib/guard';
 
 export const prerender = false;
 

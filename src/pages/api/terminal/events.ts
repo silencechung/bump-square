@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getTerminalBuffer, subscribeTerminal, subscribeTerminalClear, subscribeRunning, runningKind } from '../../../lib/claudeRunner';
+import { getTerminalBuffer, subscribeTerminal, subscribeTerminalClear, subscribeRunning, runningKind } from '~src/lib/claudeRunner';
 
 export const prerender = false;
 

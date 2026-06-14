@@ -1,9 +1,10 @@
 import type { APIRoute } from 'astro';
 import { v4 as uuid } from 'uuid';
-import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, clearAgentEvents } from '../../lib/serverState';
-import { listSaves, createSave, loadSave, deleteSave, updateSave } from '../../lib/saveStore';
-import { crossOriginBlocked } from '../../lib/guard';
-import type { Square } from '../../types';
+import { getState, mutate, resetState, replaceState, duplicateFrame, moveFrameGroup, pasteFrame, undo, redo, clearAgentEvents, setLocale } from '~src/lib/serverState';
+import { listSaves, createSave, loadSave, deleteSave, updateSave } from '~src/lib/saveStore';
+import { crossOriginBlocked } from '~src/lib/guard';
+import { isLocale } from '~src/i18n';
+import type { Square } from '~src/types';
 
 export const prerender = false;
 
@@ -147,6 +148,15 @@ export const POST: APIRoute = async ({ request }) => {
           mutate(s => { s.currentSaveId = null; }, { history: false });
         }
         return json({ ok: true, saves: listSaves() });
+      }
+
+      // UI locale toggle. Writes ~/.bump-square/config.json's ui.locale and
+      // re-emits state so every SSE subscriber picks up the new value.
+      case 'setLocale': {
+        const next = payload.locale;
+        if (!isLocale(next)) return json({ error: `Invalid locale: ${String(next)}` }, 400);
+        setLocale(next);
+        return json({ ok: true, locale: next });
       }
 
       default:

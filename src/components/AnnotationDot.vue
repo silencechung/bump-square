@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useAnnotations, type HelpArea } from '../composables/useAnnotations';
+import { useAnnotations, type HelpArea } from '~src/composables/useAnnotations';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const props = defineProps<{
   area: HelpArea;
   /** Tailwind/UnoCSS positioning override — defaults to top-right corner of
@@ -28,7 +30,7 @@ const animationDelay = computed(() => {
     v-if="annotationMode"
     type="button"
     :data-annotation-area="area"
-    :aria-label="`說明:${area}`"
+    :aria-label="`${t('annotation.dotLabel')}${area}`"
     :style="{ animationDelay }"
     :class="[
       'annotation-dot absolute z-30 w-2.5 h-2.5 rounded-full',

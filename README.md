@@ -21,17 +21,22 @@ drawer", "these four repeating chunks should be a `v-for`, not hand-rolled".
 
 所以這個工具讓我:
 
+1. 截圖丟上來
+2. 在截圖上畫框、每塊寫一句「我想要什麼」
+3. 按一下,agent 把意圖整理成可收合的結構樹 + 一份 markdown spec
+4. 複製 spec → 貼給寫 code 的 agent / 朋友 / 未來健忘的我
+
 So this tool lets me:
 
-1. 截圖丟上來 / drop a screenshot in
-2. 在截圖上畫框、每塊寫一句「我想要什麼」 / draw frames on it and write one sentence of intent per frame
-3. 按一下,agent 把意圖整理成可收合的結構樹 + 一份 markdown spec / hit a button — an agent turns it into a collapsible structure tree + a markdown spec
-4. 複製 spec → 貼給寫 code 的 agent / 朋友 / 未來健忘的我 / copy the spec → paste it to the coding agent / a friend / future-forgetful-me
+1. Drop a screenshot in
+2. Draw frames on it and write one sentence of intent per frame
+3. Hit a button — an agent turns it into a collapsible structure tree + a markdown spec
+4. Copy the spec → paste it to the coding agent / a friend / future-forgetful-me
 
-意思就是,**它的職責終點是那份 spec**。產不產 code、產什麼 code、誰來產,跟它無關。
+簡單講,**它做到那份 spec 就交差了**。後面要不要拿去產 code、產什麼樣、誰去產 — 它都不管。
 
-In other words, **the tool's job ends at that spec**. Whether anyone generates code from
-it, what code, by whom — none of bump-square's business.
+Short version: **it ships when the spec is ready**. Whether anyone turns it into code,
+what code, who does it — none of bump-square's business.
 
 ## 長這樣 / What it looks like
 
@@ -57,21 +62,22 @@ flowchart LR
     C --> D["Copy markdown spec\npaste elsewhere"]
 ```
 
-每按一次「產生意圖結構」之類的按鈕,dev server 會 spawn 一個 `claude --print` 行程
+每次按 [產生結構] 之類的 AI 按鈕,dev server 就 spawn 一隻 `claude --print` 出去
 (吃 `/bump-layout` skill),讀寫 `~/.bump-square/workspace.json`。底下 xterm panel
-看得到 agent 即時在幹嘛。沒在跑 agent 的時候,你看到的就是純前端。
+看得到 agent 即時在幹嘛。沒在跑 agent 的時候,看到的就是純前端。
 
-Each time you press an action like "產生意圖結構", the dev server spawns a `claude
---print` process (loading the `/bump-layout` skill) that reads / writes
-`~/.bump-square/workspace.json`. The xterm panel at the bottom streams the agent's live
-output. When no agent is running, you're looking at pure frontend.
+Hitting an AI button like "Structure" makes the dev server spawn a `claude --print`
+process (loading the `/bump-layout` skill) that reads / writes
+`~/.bump-square/workspace.json`. The bottom xterm panel streams what the agent's doing.
+When nothing's running, you're just looking at the frontend.
 
 ## 你需要 / What you need
 
 - **Node ≥ 22**(我自己跑 24 / I run 24)
 - **pnpm**
-- **Claude Code CLI** — 第一次 `claude login`(支援 Google OAuth),之後不用 API key / first time `claude login` (Google OAuth supported), no API key after that
-- 一張你想動腦的截圖 / a screenshot worth thinking about
+- **Claude Code CLI** — 第一次 `claude login`(支援 Google OAuth),之後不用 API key  
+  First time `claude login` (Google OAuth supported), no API key after that
+- 一張你想動腦的截圖 / A screenshot worth thinking about
 
 ## 裝起來 / Install
 
@@ -81,19 +87,19 @@ cd bump-square
 pnpm install
 ```
 
-第一次按「產生意圖結構」時,如果偵測到缺 `bump-layout` skill,會顯示一鍵安裝 banner
-把 repo 內 `skills/bump-layout/SKILL.md` 複製到 `~/.claude/skills/`。**你不用手動裝**。
+第一次按 [產生結構] 的時候,如果 `bump-layout` skill 還沒裝,會跳出一鍵安裝 banner
+把 repo 裡的 `skills/bump-layout/SKILL.md` 複製到 `~/.claude/skills/`。**手動裝完全不用**。
 
-First time you press 產生意圖結構, if the `bump-layout` skill is missing, a one-click
-install banner copies `skills/bump-layout/SKILL.md` from the repo into
+First time you press [Structure], if the `bump-layout` skill isn't installed yet, a
+one-click banner copies `skills/bump-layout/SKILL.md` from the repo into
 `~/.claude/skills/`. **No manual install step.**
 
-`pnpm run setup` 是另一個可選步驟,裝給人用的 `/bump-square` ops skill(幫你快速
-health-check + 起 dev server,跟 agent 流程無關)。沒裝也能用。
+另外 `pnpm run setup` 可選,裝一個給人用的 `/bump-square` ops skill(幫你 health-check
++ 起 dev,跟 agent 流程無關)。沒裝也跑得起來。
 
-`pnpm run setup` is optional — it installs the `/bump-square` ops skill (a quick
-health-check + dev-server helper for human use, unrelated to the agent flow). The app
-works fine without it.
+Optional: `pnpm run setup` installs the `/bump-square` ops skill (a health-check +
+dev-server helper for humans, separate from the agent flow). Skip it and the app still
+runs fine.
 
 ## 跑起來 / Run
 
@@ -102,9 +108,10 @@ pnpm dev       # http://localhost:4399
 pnpm build     # production build
 ```
 
-不需要任何 `--channels` 之類的特殊啟動模式,純跑 dev server 就好。
+開好瀏覽器丟截圖進去就開工。右上角 `繁 / EN` 切換 UI 語言。
 
-No special startup mode like `--channels` is needed — just run the dev server.
+Open it in your browser, drop a screenshot in, start working. The `繁 / EN` toggle at
+the top-right switches the UI language.
 
 ## 想看細節 / Want the technical detail
 
@@ -123,6 +130,8 @@ standard technical-doc tone.
 - `~/.bump-square/`(持久化狀態、上傳圖片、存檔)整個 gitignore。
 - agent 的 `--allowedTools` 預設只給 `Read,Write,Edit`,沒 Bash。要加可以在
   `~/.bump-square/config.json` 自己覆寫,但**沒有任意 extra-args 逃生口**,避免覆寫掉這條安全網。
+
+---
 
 - All APIs are localhost-only. State-mutating endpoints (`/api/state`, `/api/run-claude`,
   `/api/install-skill`) use `Sec-Fetch-Site` to block cross-origin POSTs

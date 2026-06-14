@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getState, onChange, canUndo, canRedo } from '../../lib/serverState';
+import { getState, onChange, canUndo, canRedo, getLocale } from '~src/lib/serverState';
 
 export const prerender = false;
 
@@ -17,8 +17,15 @@ export const GET: APIRoute = async () => {
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
       };
 
-      // Augment the board state with history availability for the UI buttons.
-      const payload = (s: unknown) => ({ ...(s as object), canUndo: canUndo(), canRedo: canRedo() });
+      // Augment board state with history availability + current locale. Locale
+      // is broadcast on the same channel so a setLocale() emits propagate to
+      // every connected tab without a separate socket.
+      const payload = (s: unknown) => ({
+        ...(s as object),
+        canUndo: canUndo(),
+        canRedo: canRedo(),
+        locale: getLocale(),
+      });
 
       // Initial snapshot
       send('state', payload(getState()));

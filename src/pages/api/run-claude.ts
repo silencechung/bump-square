@@ -2,9 +2,9 @@ import type { APIRoute } from 'astro';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import { runClaude, isRunning } from '../../lib/claudeRunner';
-import { getState, workspacePath } from '../../lib/serverState';
-import { crossOriginBlocked } from '../../lib/guard';
+import { runClaude, isRunning } from '~src/lib/claudeRunner';
+import { getState, workspacePath } from '~src/lib/serverState';
+import { crossOriginBlocked } from '~src/lib/guard';
 
 const SKILL_INSTALL_PATH = resolve(homedir(), '.claude', 'skills', 'bump-layout', 'SKILL.md');
 

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import '@xterm/xterm/css/xterm.css';
-import { useWorkspaceStore } from '../stores/workspace';
+import { useWorkspaceStore } from '~src/stores/workspace';
 import AnnotationDot from './AnnotationDot.vue';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 const store = useWorkspaceStore();
@@ -135,14 +137,14 @@ function onDragEnd() {
       <div class="ml-auto flex items-center gap-1">
         <button
           class="w-7 h-7 icon-btn hover:text-red-400"
-          title="清除終端機輸出"
+          :title="t('terminal.clear')"
           @click="term?.clear()"
         >
           <span class="i-lucide-trash-2" />
         </button>
         <button
           class="w-7 h-7 icon-btn hover:text-zinc-100"
-          title="關閉終端機面板（Ctrl+`）"
+          :title="t('terminal.close')"
           @click="emit('close')"
         >
           <span class="i-lucide-x" />

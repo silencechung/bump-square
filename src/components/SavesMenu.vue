@@ -6,8 +6,10 @@
  */
 import { ref, computed, nextTick } from 'vue';
 import { onClickOutside } from '@vueuse/core';
-import { useWorkspaceStore } from '../stores/workspace';
+import { useWorkspaceStore } from '~src/stores/workspace';
+import { useT } from '~src/composables/useT';
 
+const t = useT();
 const store = useWorkspaceStore();
 
 const open = ref(false);
@@ -81,11 +83,11 @@ function fmt(ts: number) {
   <div ref="root" class="relative">
     <button
       class="text-xs px-3 py-1 btn-neutral flex items-center gap-1.5"
-      title="存檔 / 載入元件設定"
+      :title="t('saves.menuTitle')"
       @click="toggle"
     >
       <span class="i-lucide-save" />
-      <span>存檔</span>
+      <span>{{ t('saves.menu') }}</span>
     </button>
 
     <div
@@ -98,20 +100,20 @@ function fmt(ts: number) {
            available in both states for explicit copy-out. -->
       <div v-if="store.currentSave" class="flex items-center gap-2 px-1">
         <div class="flex-1 min-w-0">
-          <div class="text-xs text-zinc-500 leading-tight">目前載入</div>
+          <div class="text-xs text-zinc-500 leading-tight">{{ t('saves.loaded') }}</div>
           <div class="text-sm text-zinc-100 truncate font-medium">{{ store.currentSave.name }}</div>
         </div>
         <button
           class="text-sm px-3 py-1.5 btn-primary"
-          title="用目前 board 覆寫這個存檔"
+          :title="t('saves.overwriteTitle')"
           @click="updateLoaded"
-        >儲存</button>
+        >{{ t('saves.save') }}</button>
       </div>
       <div v-else class="flex items-center gap-2">
         <input
           v-model="name"
           type="text"
-          placeholder="存檔名稱…"
+          :placeholder="t('saves.namePlaceholder')"
           class="flex-1 min-w-0 text-sm px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 focus:border-violet-500 text-zinc-100 outline-none"
           @keydown.enter="save"
         />
@@ -119,7 +121,7 @@ function fmt(ts: number) {
           class="text-sm px-3 py-1.5 btn-primary"
           :disabled="!name.trim()"
           @click="save"
-        >儲存</button>
+        >{{ t('saves.save') }}</button>
       </div>
 
       <!-- Save As button -->
@@ -128,13 +130,13 @@ function fmt(ts: number) {
         @click="openSaveAs"
       >
         <span class="i-lucide-file-plus" />
-        <span>另存新檔…</span>
+        <span>{{ t('saves.saveAs') }}</span>
       </button>
 
       <!-- Saves list -->
       <div class="mt-3 border-t border-zinc-700/60 pt-2 max-h-72 overflow-y-auto no-scrollbar">
         <p v-if="!store.saves.length" class="text-xs text-zinc-500 py-3 text-center">
-          尚無存檔。命名後按「儲存」保留目前設定。
+          {{ t('saves.empty') }}
         </p>
         <ul v-else class="space-y-1">
           <li
@@ -142,17 +144,17 @@ function fmt(ts: number) {
             :key="s.id"
             class="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-700/60 transition-colors"
           >
-            <button class="flex-1 min-w-0 text-left" :title="`載入「${s.name}」`" @click="load(s.id)">
+            <button class="flex-1 min-w-0 text-left" :title="`${t('saves.loadPrefix')}${s.name}${t('saves.loadSuffix')}`" @click="load(s.id)">
               <span class="block text-sm text-zinc-100 truncate">{{ s.name }}</span>
               <span class="block text-xs text-zinc-500">{{ fmt(s.savedAt) }}</span>
             </button>
             <button
               class="text-xs px-2.5 py-1 rounded-full bg-zinc-700 text-zinc-200 hover:bg-violet-400 hover:text-violet-950 transition-colors"
               @click="load(s.id)"
-            >載入</button>
+            >{{ t('saves.load') }}</button>
             <button
               class="w-7 h-7 shrink-0 icon-btn hover:text-red-400"
-              title="刪除此存檔"
+              :title="t('saves.delete')"
               @click.stop="store.removeSave(s.id)"
             >
               <span class="i-lucide-x" />
@@ -162,22 +164,26 @@ function fmt(ts: number) {
       </div>
     </div>
 
-    <!-- Save As Modal -->
-    <Teleport to="body">
+    <!-- Save As Modal. Teleport wrapped in v-if (not the inner div) — an
+         always-mounted Teleport with empty contents emits an SSR placeholder
+         that doesn't match the client's hydration shape, throwing a Vue
+         "Hydration node mismatch" warning AND silently swallowing the very
+         first click on any interactive element in the header while Vue
+         repairs the tree. -->
+    <Teleport v-if="showSaveAs" to="body">
       <div
-        v-if="showSaveAs"
         class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm"
         @click.self="closeSaveAs"
         @keydown.esc.capture="closeSaveAs"
       >
         <div class="bg-zinc-800 border border-zinc-700 rounded-2xl shadow-2xl shadow-black/60 p-6 w-80 max-w-[90vw]">
-          <h3 class="text-sm font-semibold text-zinc-100 mb-4">另存新檔</h3>
+          <h3 class="text-sm font-semibold text-zinc-100 mb-4">{{ t('saves.modalTitle') }}</h3>
 
           <input
             ref="saveAsInput"
             v-model="saveAsName"
             type="text"
-            placeholder="輸入存檔名稱…"
+            :placeholder="t('saves.modalPlaceholder')"
             class="w-full text-sm px-3 py-2 rounded-lg bg-zinc-900 border text-zinc-100 outline-none transition-colors"
             :class="isDuplicate
               ? 'border-red-500 focus:border-red-500'
@@ -186,16 +192,16 @@ function fmt(ts: number) {
             @keydown.esc.stop="closeSaveAs"
           />
           <p v-if="isDuplicate" class="mt-1.5 text-xs text-red-400">
-            「{{ saveAsName.trim() }}」已存在，請使用其他名稱。
+            {{ t('saves.dupPrefix') }}{{ saveAsName.trim() }}{{ t('saves.dupSuffix') }}
           </p>
 
           <div class="mt-5 flex justify-end gap-2">
-            <button class="text-sm px-4 py-1.5 btn-neutral" @click="closeSaveAs">取消</button>
+            <button class="text-sm px-4 py-1.5 btn-neutral" @click="closeSaveAs">{{ t('saves.cancel') }}</button>
             <button
               class="text-sm px-4 py-1.5 btn-primary"
               :disabled="!canConfirm"
               @click="confirmSaveAs"
-            >儲存</button>
+            >{{ t('saves.save') }}</button>
           </div>
         </div>
       </div>

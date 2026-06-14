@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { readImageBytes } from '../../../lib/imageStore';
-import { getState } from '../../../lib/serverState';
+import { readImageBytes } from '~src/lib/imageStore';
+import { getState } from '~src/lib/serverState';
 
 export const prerender = false;
 

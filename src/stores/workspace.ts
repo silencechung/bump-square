@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Asset, Square, StructureNode, WorkflowStep } from '../types';
 import type { Viewport } from '../lib/viewport';
+import { DEFAULT_LOCALE, type Locale } from '../i18n';
 
 interface SourceImage { url: string; filename: string; mediaType: string; width: number; height: number }
 interface AgentEvent {
@@ -38,6 +39,9 @@ interface ServerState {
   boardVersion: number;
   canUndo?: boolean;
   canRedo?: boolean;
+  /** Current UI locale (from ~/.bump-square/config.json's ui.locale). Pushed
+   * on the same SSE channel so all tabs sync when the toggle is pressed. */
+  locale?: Locale;
 }
 
 /**
@@ -74,6 +78,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const saves = ref<SaveMeta[]>([]);
   const canUndo = ref(false);
   const canRedo = ref(false);
+  // UI locale mirror. Defaults to DEFAULT_LOCALE before the first SSE arrives
+  // (SSR + pre-hydration); the first 'state' event overwrites with server truth.
+  const locale = ref<Locale>(DEFAULT_LOCALE);
 
   // Viewport (zoom/pan) is purely local: the agent reasons in image space and
   // doesn't care how the user has the canvas scrolled, so this stays out of
@@ -94,9 +101,25 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     boardVersion.value = s.boardVersion ?? 0;
     canUndo.value = s.canUndo ?? false;
     canRedo.value = s.canRedo ?? false;
+    if (s.locale) {
+      locale.value = s.locale;
+    }
 
     // Auto-advance the workflow as server state fills in.
     if (s.sourceImage && step.value === 'upload') step.value = 'layout';
+  }
+
+  // Locale toggle: dispatch to server, which writes config.json + re-broadcasts.
+  // Optimistic local update so the UI feels instant (server confirms via SSE).
+  function setLocale(next: Locale) {
+    if (next === locale.value) {
+      return;
+    }
+    locale.value = next;
+    dispatch('setLocale', { locale: next });
+  }
+  function toggleLocale() {
+    setLocale(locale.value === 'zh-TW' ? 'en' : 'zh-TW');
   }
 
   // Stale = a prompt exists, but the board has changed since it was authored.
@@ -238,6 +261,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   return {
     sourceImage, assets, squares, structure, agentEvents, boardVersion,
     step, selectedAssetId, selectedSquareId, connected, runningKind, terminalRunning, skillMissing, saves, currentSaveId, canUndo, canRedo,
+    locale, setLocale, toggleLocale,
     viewport, setViewport,
     selectedAsset, selectedSquare, currentSave, isPromptStale, isAssetsPromptStale,
     connect,

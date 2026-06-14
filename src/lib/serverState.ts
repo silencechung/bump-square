@@ -4,6 +4,8 @@ import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { v4 as uuid } from 'uuid';
 import type { Asset, Square, StructureNode } from '../types';
+import type { Locale } from '../i18n';
+import { loadConfig, saveLocale } from './config';
 
 /**
  * Single source of truth for the live workspace, held in module scope so it
@@ -102,6 +104,7 @@ const g = globalThis as unknown as {
   __bumpSquareSaveTimer?: ReturnType<typeof setTimeout>;
   __bumpSquareUndo?: BoardSnapshot[];
   __bumpSquareRedo?: BoardSnapshot[];
+  __bumpSquareLocale?: Locale;
 };
 
 const state: WorkspaceState = g.__bumpSquareState ?? (g.__bumpSquareState = loadFromDisk() ?? emptyState());
@@ -247,6 +250,28 @@ export function redo(): boolean {
 export function onChange(listener: (s: WorkspaceState) => void): () => void {
   bus.on('change', listener);
   return () => bus.off('change', listener);
+}
+
+// --- UI locale ---
+// Locale is a UI preference, not board state — kept module-scoped (not in
+// WorkspaceState / workspace.json) so loading a named save doesn't yank the
+// user's language preference around. Persisted in ~/.bump-square/config.json,
+// broadcast through the same SSE bus as board changes so all open tabs sync.
+let currentLocale: Locale = g.__bumpSquareLocale ?? (g.__bumpSquareLocale = loadConfig().ui.locale);
+
+export function getLocale(): Locale {
+  return currentLocale;
+}
+
+export function setLocale(next: Locale): void {
+  if (next === currentLocale) {
+    return;
+  }
+  saveLocale(next);
+  currentLocale = next;
+  g.__bumpSquareLocale = next;
+  // Re-emit existing state so SSE subscribers re-read the locale-augmented payload.
+  bus.emit('change', state);
 }
 
 /** Record the start of a `claude --print` run. Returns the new event id so the
