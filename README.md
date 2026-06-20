@@ -2,22 +2,34 @@
   <img src="public/logo.png" width="88" alt="bump-square logo">
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
+  <img src="https://img.shields.io/badge/Node-%E2%89%A522-brightgreen.svg" alt="Node >= 22">
+  <img src="https://img.shields.io/badge/Astro-6-FF5D01.svg" alt="Astro 6">
+  <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status: alpha">
+</p>
+
 # bump-square
 
 > 我自己用的小工具:畫一張設計截圖,在上面寫意圖,讓 agent 整理成結構,然後把那份意圖**複製給寫 code 的人 / 另一隻 agent**。本身不寫 code。
 >
 > A small tool I built for myself: drop in a design screenshot, jot your intent on each frame, let an agent shape it into a structure tree, then **copy that intent to a human dev / another agent**. The tool itself never writes code.
 
+> ⚠️ **目前 alpha。** `workspace.json` schema 與 API 還會變,別 pin 在 stable 預期。
+>
+> ⚠️ **Alpha.** The `workspace.json` schema and the HTTP API may still change — don't pin on stable expectations.
+
 ## 為什麼會有這東西 / Why this exists
 
 我畫設計稿的時候,常覺得「跟 AI 解釋想法」這段很煩。它從 Figma 拿得到顏色、尺寸、間距,
 但看不出「這個 row 其實是 list、不是單一框」、「mobile 版這個 button 要變 drawer」、
-「這四塊重複的東西是 v-for,不是手刻」這種**意圖**。
+「這四塊重複的東西其實是同一個元件 list(例如 `v-for`),不是手刻四份」這種**意圖**。
 
 When I'm working on a design, the part where I have to explain my thinking to an AI is the
 annoying bit. It can pull colors, sizes, and spacing from Figma — but it can't see
 **intent**: "this row is actually a list, not one box", "on mobile this button becomes a
-drawer", "these four repeating chunks should be a `v-for`, not hand-rolled".
+drawer", "these four repeating chunks are one repeating component (e.g. `v-for`), not
+hand-rolled".
 
 所以這個工具讓我:
 
@@ -43,13 +55,13 @@ what code, who does it — none of bump-square's business.
 ![bump-square Layout 步驟的截圖,左邊是被畫滿紫色 Frame 的設計稿,右邊 Notes rail 在記每一塊的意圖,最右邊 Agent Events panel 顯示剛剛 generate-structure / suggest-assets 的執行紀錄 — bump-square's Layout step: the design screenshot tiled with violet Frames on the left, the Notes rail capturing intent per frame on the right, and the Agent Events panel logging recent generate-structure / suggest-assets runs](public/screenshot.png)
 
 中間那塊就是 Layout 步驟:把設計稿當底圖、在上面畫框、右邊 Notes rail 一塊寫一句意圖
-(例如 `LinkArrow → click open new tab`、`ListWidge → 上下邊線 / height: 兩種尺寸 / padding-left: 40px`)。
+(例如 `LinkArrow → click open new tab`、`ListWidget → 上下邊線 / height: 兩種尺寸 / padding-left: 40px`)。
 按 `🧩 產生結構` 後,agent 會根據框的包含關係 + 你寫的 comment 整理成結構樹,
 寫進右側 Agent Events panel 看得到的那份 markdown spec。
 
 The middle is the Layout step: the design is the backdrop, you draw frames on top, and
 the Notes rail on the right gets one line of intent per frame (e.g. `LinkArrow → click
-open new tab`, `ListWidge → top/bottom border / 2 heights / padding-left 40px`). Hit
+open new tab`, `ListWidget → top/bottom border / 2 heights / padding-left 40px`). Hit
 `🧩 產生結構` and the agent assembles a structure tree from the containment + your
 comments, written into the markdown spec you see in the Agent Events panel.
 
@@ -82,7 +94,7 @@ When nothing's running, you're just looking at the frontend.
 ## 裝起來 / Install
 
 ```bash
-git clone <repo-url> bump-square
+git clone https://github.com/silencechung/bump-square.git
 cd bump-square
 pnpm install
 ```
@@ -116,11 +128,13 @@ the top-right switches the UI language.
 ## 想看細節 / Want the technical detail
 
 開發者文件、agent 操作協定、檔案監看邏輯、stream-json 過濾、CSRF guard、xterm panel
-怎麼跟 agent 串起來這些都寫在 [`CLAUDE.md`](./CLAUDE.md)。那邊是正常的技術文件 tone。
+怎麼跟 agent 串起來這些都寫在 [`CLAUDE.md`](./CLAUDE.md)。**那份是寫給 AI agent 看的
+instruction tone**(人類讀沒問題,但語氣會比較硬、有些指令性的口氣)。
 
 Developer docs, agent protocol, file-watch logic, stream-json filtering, CSRF guard, how
-the xterm panel hooks into the agent — all in [`CLAUDE.md`](./CLAUDE.md), written in a
-standard technical-doc tone.
+the xterm panel hooks into the agent — all in [`CLAUDE.md`](./CLAUDE.md). **Heads-up:**
+that file is written as instructions for AI agents (human-readable, but the tone is
+terser and more directive than a typical README).
 
 ## 一些安全相關的事 / Security notes
 
