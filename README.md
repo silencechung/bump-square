@@ -125,6 +125,52 @@ pnpm build     # production build
 Open it in your browser, drop a screenshot in, start working. The `繁 / EN` toggle at
 the top-right switches the UI language.
 
+## 設定 / Config
+
+選配。想覆寫預設就在 `~/.bump-square/config.json` 開一個 JSON,只放想改的欄位
+(shallow merge,沒寫到的吃 default;檔案不存在也 OK)。每次按 AI 按鈕都會重讀,改完
+不用 restart。
+
+Optional. To override defaults, put a JSON file at `~/.bump-square/config.json` with
+just the fields you want to change (shallow-merged onto defaults; missing fields fall
+back; the file itself is optional). Re-read on every AI button press — no restart
+needed.
+
+```jsonc
+{
+  "claude": {
+    // 'sonnet' (default) / 'opus' / 'haiku' / 任何 Claude Code 吃的 model 字串
+    // 'sonnet' (default) / 'opus' / 'haiku' / any model string Claude Code accepts
+    "model": "sonnet",
+
+    // 傳給 `claude --print --allowedTools` 的工具清單。預設不含 Bash;
+    // 要加自己加 — 但這是安全網,慎重(見下面 Security notes)。
+    // Tools passed to `claude --print --allowedTools`. No Bash by default;
+    // widen deliberately — this is the safety net (see Security notes below).
+    "allowedTools": ["Read", "Write", "Edit"],
+
+    // 'stream-json' (default,xterm panel 需要) | 'text'
+    // 'stream-json' (default — required by the xterm panel) | 'text'
+    "outputFormat": "stream-json",
+
+    // stream-json 需要 verbose。改 outputFormat: 'text' 才考慮關。
+    // stream-json requires verbose. Only turn off if outputFormat is 'text'.
+    "verbose": true
+  },
+  "ui": {
+    // 'zh-TW' (default) | 'en'。Header 的 繁/EN 切換會直接寫回這欄。
+    // 'zh-TW' (default) | 'en'. The header 繁/EN toggle writes here directly.
+    "locale": "zh-TW"
+  }
+}
+```
+
+只收上面這些 typed 欄位。塞 `extraArgs` / `args` / 自訂 flag 陣列**會被忽略**,
+這是故意的(見 Security notes)。
+
+Only the typed fields above are accepted. Putting `extraArgs` / `args` / a custom flag
+array in there **will be silently ignored** — by design (see Security notes).
+
 ## 想看細節 / Want the technical detail
 
 開發者文件、agent 操作協定、檔案監看邏輯、stream-json 過濾、CSRF guard、xterm panel
