@@ -15,9 +15,9 @@
 >
 > A small tool I built for myself: drop in a design screenshot, jot your intent on each frame, let an agent shape it into a structure tree, then **copy that intent to a human dev / another agent**. The tool itself never writes code.
 
-> ⚠️ **目前 alpha。** `workspace.json` schema 與 API 還會變,別 pin 在 stable 預期。
+> ⚠️ **Alpha**:`workspace.json` schema 跟 HTTP API 都還會變,目前還不適合當穩定版依賴。
 >
-> ⚠️ **Alpha.** The `workspace.json` schema and the HTTP API may still change — don't pin on stable expectations.
+> ⚠️ **Alpha:** the `workspace.json` schema and the HTTP API are still moving — not ready for stable use.
 
 ## 為什麼會有這東西 / Why this exists
 
@@ -159,4 +159,4 @@ terser and more directive than a typical README).
 
 ## License
 
-[MIT](./LICENSE) © 2026 silencechung
+[MIT](./LICENSE)
