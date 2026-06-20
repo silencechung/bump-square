@@ -14,13 +14,15 @@ bump-square 是設計稿與「真正寫程式的 agent」之間的**意圖確認
 
 單一真實來源在 server，瀏覽器與 `claude --print` 都讀寫同一份 `~/.bump-square/workspace.json`。
 
-- `src/lib/serverState.ts` — **single source of truth**(module-scope,HMR-safe via `globalThis`)。持久化到 `~/.bump-square/workspace.json`(debounced atomic write,tmp + rename);含 undo/redo 快照堆疊(board only,上限 30)。**`fs.watch` 監聽該目錄**:若檔案被外部(`claude --print`)改動就 reload + 廣播給瀏覽器(自寫時用 `_suppressWatch` flag 避免迴圈;reload 時**保留 in-memory 的 `boardVersion` / `structure.*Version` 戳記**,server 是版號的唯一裁決者)。**版號模型**:`boardVersion`(timetick,`Date.now()`)在每次 board mutation 時 bump(`mutate({ bumpVersion: true })`,預設跟著 `history` 走;undo/redo 顯式 bump);`structure.promptVersion` / `assetsPromptVersion` 在 `claudeRunner` agent spawn 時抓 `boardVersion` 當 stamp,close handler 在 exit 0 時用 `stampStructureVersion()` 寫回。UI 比對 `boardVersion !== promptVersion` 判定 stale。
+- `src/lib/serverState.ts` — **single source of truth**(module-scope,HMR-safe via `globalThis`)。持久化到 `~/.bump-square/workspace.json`(debounced atomic write,tmp + rename);含 undo/redo 快照堆疊(board only,上限 30)。**`fs.watch` 監聽該目錄**:若檔案被外部(`claude --print`)改動就 reload + 廣播給瀏覽器(自寫時用 `_suppressWatch` flag 避免迴圈;reload 時**保留 in-memory 的 `boardVersion` / `structure.*Version` 戳記**,server 是版號的唯一裁決者)。**版號模型**:`boardVersion`(timetick,`Date.now()`)在每次 board mutation 時 bump(`mutate({ bumpVersion: true })`,預設跟著 `history` 走;undo/redo 顯式 bump);`structure.promptVersion` / `assetsPromptVersion` 在 `claudeRunner` agent spawn 時抓 `boardVersion` 當 stamp,close handler 在 exit 0 時用 `stampStructureVersion()` 寫回。UI 比對 `boardVersion !== promptVersion` 判定 stale。**UI locale 也住這**(`currentLocale` module-level,初值來自 `loadConfig().ui.locale`):`getLocale()` 讀、`setLocaleAndSave()` 寫(同時 persist 到 config.json + 重 emit SSE 讓所有 tab 更新)。
 - `src/pages/api/events.ts` — **SSE** `/api/events`，把權威狀態（+ `canUndo/canRedo`）推給瀏覽器。
-- `src/pages/api/state.ts` — **瀏覽器 → server** 的 mutation（`action` + `payload`）。CSRF guard。
+- `src/pages/api/state.ts` — **瀏覽器 → server** 的 mutation（`action` + `payload`）。CSRF guard。Action 列表含 board ops(addSquare / updateSquare / removeSquare / duplicateFrame / moveFrameGroup / pasteFrame / undo / redo / reset...)、save ops(listSaves / saveState / loadState / updateCurrentSave / deleteSave)、`setLocale`(switch UI 語言走這條,不存 localStorage)。
 - `src/pages/api/run-claude.ts` — **瀏覽器 → server** 觸發 agent：`POST { kind: 'generate-structure' | 'suggest-assets' }`，CSRF guard，回 `202` 後立即 spawn。Pre-flight 檢查 `~/.claude/skills/bump-layout/SKILL.md` 存在；不存在回 `409 skill-missing`，UI 顯示安裝 banner。
 - `src/lib/claudeRunner.ts` — 管理 `claude --print` lifecycle（**同時只跑一個**，後續排 queue）。每次 spawn 都重讀 `~/.bump-square/config.json`（見 `src/lib/config.ts`）；預設 args：`--model sonnet --output-format stream-json --verbose --allowedTools Read,Write,Edit`，使用者可在 config 覆寫 model / allowedTools / outputFormat / verbose。**沒有任意 extra-args 逃生口**——`--allowedTools` 只是 auto-approve list，真正擋住「不在 list 內的工具」是因為 `--print` 沒人能 prompt + 預設 permission-mode；若放任意 args，攻擊者可塞 `--permission-mode bypassPermissions`／`--dangerously-skip-permissions`／`--add-dir /`／第二個 `--allowedTools` 直接繞過。stream-json 一行一個事件，`formatStreamEvent()` 把它翻成 xterm-friendly 進度行（drop hook 噪音；assistant 文字直出；tool_use → `🛠 ToolName <target>`；tool_result 沉默除非 error），同時推進 circular buffer（最多 10000 行）與 SSE bus。
+- `src/lib/config.ts` — `~/.bump-square/config.json` 的 schema 跟讀寫。Schema:`{ claude: { model, allowedTools, outputFormat, verbose }, ui: { locale } }`。`loadConfig()` 把 file 合併到 hardcoded defaults(`model: 'sonnet'`、`allowedTools: ['Read','Write','Edit']`、`locale: 'zh-TW'`),讀檔失敗就 fallback 到 defaults 讓 app 永遠跑得起來;`saveLocale()` 用 read-modify-write 寫回,保留其他無關 override(例:不會把 `claude.model` 蓋掉)。**typed fields only — 不收任意 args / extras 陣列**(`extraArgs` 1.0 安全課程,見 memory 同名 entry)。
 - `src/pages/api/terminal/events.ts` — SSE `/api/terminal/events`，連線時 replay buffer，之後 live push chunks／clear／status（running 狀態）。chunk 用 base64 encode（避開 SSE 換行問題）。
 - `src/pages/api/install-skill.ts` — `POST`，把 repo 內 `skills/bump-layout/SKILL.md` copy 到 `~/.claude/skills/bump-layout/SKILL.md`（idempotent）。CSRF guard。
+- `src/pages/api/i18n.ts` — `GET /api/i18n[?locale=en|all=1]`,read-only snapshot。SSR 初次 render / 外部 debug 用;**locale 變更本身走既有 SSE**(`/api/events`),UI 不需 poll 這個 endpoint。
 - `skills/bump-layout/SKILL.md` — `claude --print` 真正讀的 skill：`/bump-layout` 指令告訴 agent 讀 `~/.bump-square/workspace.json`、依 containment + comment 產生 structure、直接寫回該檔案。**只允許動 workspace.json**；JSON 寫檔禁用 `Edit` 工具（用 Read + Write）。
 - `src/components/TerminalPanel.vue` — 底部 xterm.js readonly panel（`disableStdin: true`，FitAddon），預設收起，header `>_` 按鈕切換；首次 `terminalRunning` 自動展開一次（之後使用者關了就不再自動開）；高度 240px 可拖。
 - `src/components/SkillInstallBanner.vue` — 偵測 `store.skillMissing`，顯示「一鍵安裝 bump-layout skill」banner，POST `/api/install-skill` → 清掉 flag → store 自動 retry 原本的 run。
@@ -28,13 +30,19 @@ bump-square 是設計稿與「真正寫程式的 agent」之間的**意圖確認
 - `src/lib/saveStore.ts` — 具名存檔 `~/.bump-square/saves/<id>.json`（只存 board，不含 agent log）。
 - `src/lib/containment.ts` — 幾何包含關係（結構樹的依據）。
 - `src/lib/guard.ts` — `crossOriginBlocked()`：用 `Sec-Fetch-Site` 擋跨站 POST，避免使用者開到惡意網頁就被 RCE（任意 `claude --print`）。
-- `src/stores/workspace.ts` — Pinia store，瀏覽器端的唯讀鏡像 + dispatch；`runAgentKind(kind)` 打 `/api/run-claude`，409 時把 `skillMissing` 記下、安裝完自動 retry。
-- `src/composables/` — WorkspaceCanvas 的邏輯拆成三個 composable（元件本身只剩 wiring + template）：
-  - `useViewport.ts` — zoom／pan／fit／focus／1:1（座標數學在 `lib/viewport.ts`，這裡是 reactive glue：container size、auto-fit、wheel zoom）。
+- `src/stores/workspace.ts` — Pinia store，瀏覽器端的唯讀鏡像 + dispatch；`runAgentKind(kind)` 打 `/api/run-claude`，409 時把 `skillMissing` 記下、安裝完自動 retry。`locale` ref + `toggleLocale()` / `setLocale()` 也住這(`toggleLocale` 在 `zh-TW` / `en` 之間 swap;dispatch `'setLocale'` 走 `/api/state`)。
+- `src/i18n/{zh-TW.ts, en.ts, index.ts}` — **中央 i18n dict + 型別**。`index.ts` 匯出 `getStrings(locale)` / `getString(locale, key)` / `StringKey`(= `keyof typeof zhTW`,讓 `t('typo')` 直接 compile error)。新增字串就改 dict、不用碰每個 component;沒拉 vue-i18n 是因為只有 2 locale + ~70 字串,full library 的 plural / number / date 用不到。
+- `src/composables/` — 共用 reactive 邏輯(component 只剩 wiring + template):
+  - `useViewport.ts` — zoom／pan／fit／focus／1:1（WorkspaceCanvas 用;座標數學在 `lib/viewport.ts`，這裡是 reactive glue：container size、auto-fit、wheel zoom）。
   - `useFrameInteractions.ts` — 畫框／pan／resize（8 handle）／拖移群組／copy-cut-paste,含幾何 helper(`screenRect`／`imgStyle`／z-stacking／ghost preview)與統一 pointer handlers。**單一 `drawMode` 狀態**:false = Hand mode(預設,純 pan 工具,所有拖曳都 pan),true = Frame mode(canvas 拖曳畫 frame、frame 拖曳畫巢狀;`Ctrl + frame body` 才移動 — 唯一移動路徑)。`handMode` computed 維持 inverse 給呼叫端用。
   - `useNotesRail.ts` — Notes rail 的 leader line（hover + 選取兩種）、浮動 label 排版、`notesOpen`／`showLabels`。
+  - `useT.ts` — i18n lookup(32 行);`useT()` 回傳 `(key: StringKey) => string`,讀 `store.locale` 所以 reactive(切 locale 全部 re-render)。
+  - `useAnnotations.ts` — `AnnotationDot` 共用的 popover open state + `HelpArea` union 型別(下面那條解釋)。
+- `src/components/{AnnotationDot, AnnotationOverlay}.vue` + `src/content/help/{en,zh-TW}/<area>.md` — **ⓘ help popover 系統**。每個區塊放 `<AnnotationDot area="...">`,hover 跳出對應的 markdown 文章(`markdown-it`,`html:false` 防 XSS)。`area` 是 `HelpArea` union(在 `useAnnotations.ts`),compile 期把 `<AnnotationDot area="typo">` 擋下(typo 不會默默變「(說明缺失)」)。Content locale-aware,跟著 `store.locale` 切目錄。目前 8+ dot 散落在 `AppShell`(breadcrumb / save-cluster / ai-cluster / reset)、`WorkspaceCanvas`(canvas / canvas-toolbar / notes-rail)、`StructureView`、`TerminalPanel`。
 
 `~/.bump-square/` 與 `.bump-square/`（rare local override）整個 gitignore。
+
+**locale 同步路徑**(跟 workspace.json 同 pattern,server 是唯一真相):瀏覽器 toggle 按鈕 → `store.toggleLocale()` → `dispatch('setLocale', { locale })` → `POST /api/state` 的 `setLocale` action → `serverState.setLocaleAndSave()` 寫 `~/.bump-square/config.json` + 重 emit SSE → 所有打開的 tab 同步切換 + 所有用 `useT()` 的 component reactive re-render。**沒新 socket、沒 localStorage,re-use 既有 mutation + SSE 管道**;`useT()` 只是 store.locale + dict lookup 的 thin wrapper(32 行),locale 是 reactive ref 所以 `t('key')` 在 template / computed 裡會自動 track。
 
 ### 已移除的舊架構（commits 0bd570e → 0f0013b）
 
@@ -50,7 +58,7 @@ bump-square 是設計稿與「真正寫程式的 agent」之間的**意圖確認
 ## Tech stack
 
 - **Astro 6**（`output: 'server'`，Node standalone adapter）+ **Vue 3** islands（`<script setup lang="ts">`）+ **Pinia** + **UnoCSS**（`presetWind4`，對齊原本的 Tailwind v4／oklch 色票與 v4 reset；`@unocss/astro` integration + `uno.config.ts`）。
-- **Vite**、**pnpm**、Node ≥ 22（實際跑 24）。**TypeScript** + `@types/node`；`pnpm exec tsc --noEmit` 可型別檢查。
+- **Vite**、**pnpm**、Node ≥ 22（實際跑 24）。**TypeScript** + `@types/node` + **`~src/*` path alias**（`tsconfig.json` 的 `paths`,等於 `./src/*`,整 codebase 50+ 處 import 都用這個 — 重構搬檔不會把相對路徑 `../../../lib/x` 拉斷）；`pnpm exec tsc --noEmit` 可型別檢查。
 - `@xterm/xterm` + `@xterm/addon-fit`（terminal panel）、`zod`、`uuid`、`sharp`、`konva` / `vue-konva`、`markdown-it`（Structure 的 Prompt 預覽渲染，`html:false` 防 XSS）。
 - Dev server **port 固定 4399**（`astro.config.mjs`）。
 - **CLI 依賴**：`claude`（Claude Code CLI）必須在 PATH 上、已 `claude login`。`claudeRunner` 用 `spawn('claude', ...)`；找不到會在 terminal 顯示 spawn error。
