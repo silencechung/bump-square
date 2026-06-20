@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/Node-%E2%89%A522-brightgreen.svg" alt="Node >= 22">
   <img src="https://img.shields.io/badge/Astro-6-FF5D01.svg" alt="Astro 6">
-  <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status: alpha">
+  <img src="https://img.shields.io/badge/by-silencechung-blue.svg" alt="by silencechung">
 </p>
 
 # bump-square
@@ -15,9 +15,9 @@
 >
 > A small tool I built for myself: drop in a design screenshot, jot your intent on each frame, let an agent shape it into a structure tree, then **copy that intent to a human dev / another agent**. The tool itself never writes code.
 
-> ⚠️ **Alpha**:`workspace.json` schema 跟 HTTP API 都還會變,目前還不適合當穩定版依賴。
+> ⚠️ **silencechung 的個人工具**:`workspace.json` schema 跟 HTTP API 還會變,不是 stable 釋出。
 >
-> ⚠️ **Alpha:** the `workspace.json` schema and the HTTP API are still moving — not ready for stable use.
+> ⚠️ **A personal tool by silencechung** — the `workspace.json` schema and the HTTP API are still moving; not a stable release.
 
 ## 為什麼會有這東西 / Why this exists
 
