@@ -108,12 +108,6 @@ The prompt will start with `/bump-layout` followed by the operation kind:
    ```
 4. Write back: `structure.assetsPrompt = <your markdown>` (leave tree/prompt untouched).
 
-### handoff
-
-The prompt will include the full spec markdown.  
-Implement the described Vue 3 component under `~/Documents/Projects/` (Vite + TypeScript + scoped CSS).  
-Do not update workspace.json for this operation.
-
 ## File write format
 
 Read workspace.json, parse, mutate only the `structure` sub-object, write back with `JSON.stringify(data)` (no pretty-print needed).  
@@ -122,5 +116,5 @@ Use the `Read` and `Write` tools — do **not** use the `Edit` tool for JSON (it
 ## Important rules
 
 - Only read/write `~/.bump-square/workspace.json` (or the path given).
-- Do not read, write, or modify any other files unless it is a `handoff` operation.
+- Do not read, write, or modify any other files.
 - After writing, output a short summary of what you wrote (in Traditional Chinese).
