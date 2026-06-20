@@ -1,7 +1,7 @@
 {
   "name": "bump-square",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -17,6 +17,14 @@
     "@astrojs/node": "^10.1.2",
     "@astrojs/vue": "^6.0.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tiptap/core": "^3.27.1",
+    "@tiptap/extension-document": "^3.27.1",
+    "@tiptap/extension-history": "^3.27.1",
+    "@tiptap/extension-paragraph": "^3.27.1",
+    "@tiptap/extension-placeholder": "^3.27.1",
+    "@tiptap/extension-text": "^3.27.1",
+    "@tiptap/suggestion": "^3.27.1",
+    "@tiptap/vue-3": "^3.27.1",
     "@vueuse/core": "^14.3.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",

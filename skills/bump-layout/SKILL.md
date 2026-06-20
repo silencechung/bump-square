@@ -38,6 +38,16 @@ If the prompt contains a line like `workspace: /absolute/path/to/workspace.json`
 }
 ```
 
+**Reading `comment`:** plain string, but the user's editor lets them mark
+identifiers with backticks — `` `flex` ``, `` `padding-left` ``, `` `text-zinc-100` ``,
+`` `登入按鈕` `` — to signal "this is a token / utility class / proper noun",
+not prose. Strip them mentally; the surrounding text is full context. To
+extract just the tagged tokens, regex `` /`([^`\s]+)`/g `` (no whitespace
+inside backticks). Example: `` "- `padding-left`: 40px" `` → tags = `["padding-left"]`,
+intent = "padding-left = 40px". Do NOT discard the non-tag text — values
+(`40px`), modifiers (`other`), and descriptions (`-> click open new tab`)
+are all meaningful.
+
 **StructureNode shape:**
 ```
 {

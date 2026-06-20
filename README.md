@@ -55,13 +55,18 @@ what code, who does it — none of bump-square's business.
 ![bump-square Layout 步驟的截圖,左邊是被畫滿紫色 Frame 的設計稿,右邊 Notes rail 在記每一塊的意圖,最右邊 Agent Events panel 顯示剛剛 generate-structure / suggest-assets 的執行紀錄 — bump-square's Layout step: the design screenshot tiled with violet Frames on the left, the Notes rail capturing intent per frame on the right, and the Agent Events panel logging recent generate-structure / suggest-assets runs](public/screenshot.png)
 
 中間那塊就是 Layout 步驟:把設計稿當底圖、在上面畫框、右邊 Notes rail 一塊寫一句意圖
-(例如 `LinkArrow → click open new tab`、`ListWidget → 上下邊線 / height: 兩種尺寸 / padding-left: 40px`)。
-按 `🧩 產生結構` 後,agent 會根據框的包含關係 + 你寫的 comment 整理成結構樹,
-寫進右側 Agent Events panel 看得到的那份 markdown spec。
+(例如 ``LinkArrow → click open new tab``、``ListWidget → 上下邊線 / `height`: 兩種尺寸 / `padding-left`: 40px``)。
+Comment 編輯器在你打 `` `flex` ``、`` `padding-left` `` 之類的 backtick-wrapped token 時
+會把它變成紫色 chip,順便有 ~250 條 HTML / CSS / Tailwind 字典 popup 提示 — 在 terminal /
+非 IDE 環境寫意圖、語法記不全時用。按 `🧩 產生結構` 後,agent 會根據框的包含關係 +
+你寫的 comment 整理成結構樹,寫進右側 Agent Events panel 看得到的那份 markdown spec。
 
 The middle is the Layout step: the design is the backdrop, you draw frames on top, and
-the Notes rail on the right gets one line of intent per frame (e.g. `LinkArrow → click
-open new tab`, `ListWidget → top/bottom border / 2 heights / padding-left 40px`). Hit
+the Notes rail on the right gets one line of intent per frame (e.g. ``LinkArrow → click
+open new tab``, ``ListWidget → top/bottom border / `height`: 2 sizes / `padding-left`: 40px``).
+The comment editor turns backtick-wrapped tokens like `` `flex` `` or `` `padding-left` ``
+into inline purple chips, with a ~250-entry HTML / CSS / Tailwind autocomplete popup
+for when you're typing intent away from an IDE and can't remember the exact name. Hit
 `🧩 產生結構` and the agent assembles a structure tree from the containment + your
 comments, written into the markdown spec you see in the Agent Events panel.
 
@@ -139,9 +144,9 @@ needed.
 ```jsonc
 {
   "claude": {
-    // 'sonnet' (default) / 'opus' / 'haiku' / 任何 Claude Code 吃的 model 字串
-    // 'sonnet' (default) / 'opus' / 'haiku' / any model string Claude Code accepts
-    "model": "sonnet",
+    // 'haiku' (default) / 'sonnet' / 'opus' / 任何 Claude Code 吃的 model 字串
+    // 'haiku' (default) / 'sonnet' / 'opus' / any model string Claude Code accepts
+    "model": "haiku",
 
     // 傳給 `claude --print --allowedTools` 的工具清單。預設不含 Bash;
     // 要加自己加 — 但這是安全網,慎重(見下面 Security notes)。

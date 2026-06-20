@@ -1,0 +1,135 @@
+/**
+ * Hardcoded dictionary for the autocomplete popup inside backtick-delimited
+ * tags in Frame comments.
+ *
+ * Three layers (all lowercase, kebab-case where applicable):
+ * - HTML element names — the common ones that come up when describing UI intent
+ * - CSS property names — common subset, full longhand for properties used a lot
+ * - Tailwind / UnoCSS utility class names — curated high-frequency utilities
+ *   only. No value / size / color variants (`p-4`, `text-zinc-900`,
+ *   `bg-violet-500/60`), no breakpoint prefixes (`sm:`, `md:`), no state
+ *   prefixes (`hover:`, `focus:`). Those expand the space combinatorially and
+ *   the user can type them by hand — backtick syntax means off-dict tags work.
+ *
+ * The popup is a CONVENIENCE: it filters this dict by prefix as the user
+ * types after an opening backtick. If the user closes the backtick manually
+ * (or picks nothing), the InputRule in `tagNode.ts` still fires for off-dict
+ * content. The dict only governs what shows up in the popup list.
+ *
+ * Names that are BOTH a CSS prop and a Tailwind utility (e.g. `flex`,
+ * `border`, `gap`) only appear once.
+ */
+export const LABEL_DICT: readonly string[] = [
+  // --- HTML elements ---
+  'a', 'abbr', 'address', 'article', 'aside', 'audio',
+  'b', 'blockquote', 'body', 'br', 'button',
+  'canvas', 'caption', 'cite', 'code', 'col', 'colgroup',
+  'datalist', 'dd', 'details', 'dialog', 'div', 'dl', 'dt',
+  'em',
+  'fieldset', 'figcaption', 'figure', 'footer', 'form',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hr', 'html',
+  'i', 'iframe', 'img', 'input',
+  'kbd',
+  'label', 'legend', 'li', 'link',
+  'main', 'mark', 'menu', 'meta', 'meter',
+  'nav',
+  'ol', 'optgroup', 'option', 'output',
+  'p', 'picture', 'pre', 'progress',
+  'q',
+  's', 'section', 'select', 'slot', 'small', 'source', 'span', 'strong',
+  'sub', 'summary', 'sup', 'svg',
+  'table', 'tbody', 'td', 'template', 'textarea', 'tfoot', 'th', 'thead',
+  'time', 'title', 'tr', 'track',
+  'u', 'ul',
+  'video',
+
+  // --- CSS properties ---
+  'align-content', 'align-items', 'align-self', 'animation', 'aspect-ratio',
+  'backdrop-filter', 'background', 'background-color', 'background-image',
+  'background-position', 'background-repeat', 'background-size',
+  'border', 'border-bottom', 'border-color', 'border-left', 'border-radius',
+  'border-right', 'border-style', 'border-top', 'border-width',
+  'bottom', 'box-shadow', 'box-sizing',
+  'clip-path', 'color', 'content', 'cursor',
+  'display',
+  'filter', 'flex', 'flex-basis', 'flex-direction', 'flex-grow',
+  'flex-shrink', 'flex-wrap', 'float',
+  'font', 'font-family', 'font-size', 'font-style', 'font-weight',
+  'gap', 'grid', 'grid-area', 'grid-column', 'grid-row',
+  'grid-template-areas', 'grid-template-columns', 'grid-template-rows',
+  'height',
+  'isolation',
+  'justify-content', 'justify-items', 'justify-self',
+  'left', 'letter-spacing', 'line-height', 'list-style',
+  'margin', 'margin-bottom', 'margin-left', 'margin-right', 'margin-top',
+  'max-height', 'max-width', 'min-height', 'min-width',
+  'object-fit', 'object-position', 'opacity', 'order',
+  'outline', 'overflow', 'overflow-x', 'overflow-y',
+  'padding', 'padding-bottom', 'padding-left', 'padding-right', 'padding-top',
+  'pointer-events', 'position',
+  'resize', 'right',
+  'text-align', 'text-decoration', 'text-overflow', 'text-transform',
+  'top', 'transform', 'transform-origin', 'transition',
+  'user-select',
+  'vertical-align', 'visibility',
+  'white-space', 'width', 'word-break',
+  'z-index',
+
+  // --- Tailwind / UnoCSS utility classes (curated, no value variants) ---
+  'block', 'contents', 'hidden', 'inline', 'inline-block', 'inline-flex',
+  'inline-grid',
+  'absolute', 'fixed', 'relative', 'static', 'sticky',
+  'basis', 'content-center', 'flex-col', 'flex-nowrap', 'flex-row', 'grow',
+  'items-baseline', 'items-center', 'items-end', 'items-start', 'items-stretch',
+  'justify-around', 'justify-between', 'justify-center', 'justify-end',
+  'justify-evenly', 'justify-start',
+  'place-content-center', 'place-items-center',
+  'self-center', 'self-end', 'self-start', 'self-stretch',
+  'shrink',
+  'gap-x', 'gap-y',
+  'm', 'mb', 'ml', 'mr', 'mt', 'mx', 'my',
+  'p', 'pb', 'pl', 'pr', 'pt', 'px', 'py',
+  'space-x', 'space-y',
+  'h-auto', 'h-fit', 'h-full', 'h-screen',
+  'max-h', 'max-w', 'min-h', 'min-w', 'size',
+  'w-auto', 'w-fit', 'w-full', 'w-screen',
+  'inset', 'inset-x', 'inset-y', 'z',
+  'bg',
+  'border-b', 'border-l', 'border-r', 'border-t', 'border-x', 'border-y',
+  'divide-x', 'divide-y',
+  'ring',
+  'rounded', 'rounded-2xl', 'rounded-3xl', 'rounded-full', 'rounded-lg',
+  'rounded-md', 'rounded-none', 'rounded-sm', 'rounded-xl',
+  'antialiased', 'break-all', 'break-normal', 'break-words', 'capitalize',
+  'font-black', 'font-bold', 'font-light', 'font-medium', 'font-normal',
+  'font-semibold', 'font-thin',
+  'italic', 'leading', 'line-through', 'lowercase', 'no-underline',
+  'normal-case', 'not-italic',
+  'subpixel-antialiased', 'text', 'text-center', 'text-justify', 'text-left',
+  'text-right', 'tracking', 'truncate', 'underline', 'uppercase',
+  'whitespace-normal', 'whitespace-nowrap', 'whitespace-pre',
+  'whitespace-pre-line', 'whitespace-pre-wrap',
+  'overflow-auto', 'overflow-hidden', 'overflow-scroll', 'overflow-visible',
+  'overflow-x-auto', 'overflow-x-hidden', 'overflow-y-auto', 'overflow-y-hidden',
+  'backdrop-blur', 'blur', 'brightness', 'contrast', 'drop-shadow', 'grayscale',
+  'invert', 'saturate', 'sepia',
+  'shadow', 'shadow-2xl', 'shadow-inner', 'shadow-lg', 'shadow-md',
+  'shadow-none', 'shadow-sm', 'shadow-xl',
+  'cursor-default', 'cursor-grab', 'cursor-grabbing', 'cursor-move',
+  'cursor-not-allowed', 'cursor-pointer', 'cursor-text', 'cursor-wait',
+  'pointer-events-auto', 'pointer-events-none',
+  'select-all', 'select-auto', 'select-none', 'select-text',
+  'object-bottom', 'object-center', 'object-contain', 'object-cover',
+  'object-fill', 'object-left', 'object-none', 'object-right',
+  'object-scale-down', 'object-top',
+  'list-decimal', 'list-disc', 'list-inside', 'list-none', 'list-outside',
+  'animate', 'animate-bounce', 'animate-none', 'animate-ping', 'animate-pulse',
+  'animate-spin',
+  'duration', 'ease', 'ease-in', 'ease-in-out', 'ease-linear', 'ease-out',
+  'transition-all', 'transition-colors', 'transition-none',
+  'transition-opacity', 'transition-transform',
+  'origin-center', 'rotate', 'scale', 'scale-x', 'scale-y', 'skew-x', 'skew-y',
+  'translate-x', 'translate-y',
+  'aspect-auto', 'aspect-square', 'aspect-video',
+  'container', 'group', 'isolate', 'not-sr-only', 'peer', 'sr-only',
+];

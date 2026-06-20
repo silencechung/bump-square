@@ -80,6 +80,34 @@ const SAVE_PATH = resolve(homedir(), '.bump-square', 'workspace.json');
 export const workspacePath = SAVE_PATH;
 const SAVE_DEBOUNCE_MS = 400;
 
+/**
+ * One-off normalize for the CommentEditor `\n` round-trip bug (pre-fix):
+ * the editor's `getText()` used the Tiptap default `\n\n` separator while
+ * `stringToDoc.split('\n')` split on single `\n`, doubling the empty
+ * paragraphs in `sq.comment` on every reload — exponentially. Fix is in
+ * `CommentEditor.vue` (uses `{ blockSeparator: '\n' }`); this migration
+ * collapses already-bloated comments on disk.
+ *
+ * Trade-off: cap-at-2 would preserve intentional double-Enter empty
+ * paragraphs, but the editor never had a UX for them and the old bug
+ * also produced exactly `\n\n` from a single Enter — there's no way to
+ * tell intent from artifact in `\n\n`. Collapsing all `\n{2,}` to a
+ * single `\n` is the user-chosen behavior (M2 in the design thread).
+ *
+ * Idempotent: re-running on a clean comment is a no-op.
+ */
+function normalizeCommentNewlines(s: WorkspaceState): WorkspaceState {
+  for (const sq of s.squares) {
+    if (sq.comment) {
+      sq.comment = sq.comment.replace(/\n{2,}/g, '\n');
+    }
+    if (sq.aiNote) {
+      sq.aiNote = sq.aiNote.replace(/\n{2,}/g, '\n');
+    }
+  }
+  return s;
+}
+
 function loadFromDisk(): WorkspaceState | null {
   try {
     if (!existsSync(SAVE_PATH)) {
@@ -88,7 +116,8 @@ function loadFromDisk(): WorkspaceState | null {
     const raw = readFileSync(SAVE_PATH, 'utf8');
     const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
     // Merge onto a fresh empty state so missing/new fields stay well-formed.
-    return { ...emptyState(), ...parsed };
+    const merged = { ...emptyState(), ...parsed };
+    return normalizeCommentNewlines(merged);
   } catch (err) {
     console.error('[bump-square] Failed to load workspace.json, starting empty:', err);
     return null;

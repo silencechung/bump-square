@@ -7,6 +7,7 @@ import { useNotesRail } from '~src/composables/useNotesRail';
 import { useFrameInteractions } from '~src/composables/useFrameInteractions';
 import { useT } from '~src/composables/useT';
 import AnnotationDot from './AnnotationDot.vue';
+import CommentEditor from './CommentEditor.vue';
 
 const t = useT();
 const store = useWorkspaceStore();
@@ -133,24 +134,8 @@ function commitLabel(id: string) {
   editingLabelId.value = null;
 }
 
-// Auto-grow the comment textarea with its content, up to a cap; past the cap it
-// scrolls (with the scrollbar hidden via .no-scrollbar). Keeps short notes
-// compact and long ones readable without a premature scrollbar.
-const COMMENT_MAX_PX = 200;
-function autoGrow(el: HTMLTextAreaElement) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, COMMENT_MAX_PX) + 'px';
-}
-const vAutosize = {
-  // Measure on the next frame: at mount time the rail may not be laid out yet,
-  // so scrollHeight would be taken at the wrong width and overshoot.
-  mounted: (el: HTMLTextAreaElement) => requestAnimationFrame(() => autoGrow(el)),
-};
-
-function onCommentInput(sq: Square, e: Event) {
-  const el = e.target as HTMLTextAreaElement;
-  store.updateSquare(sq.id, { comment: el.value });
-  autoGrow(el);
+function onCommentChange(sq: Square, next: string) {
+  store.updateSquare(sq.id, { comment: next });
 }
 
 // Feature #1 — comment discoverability.
@@ -194,6 +179,32 @@ function acceptAiNote(sq: Square) {
 }
 function dismissAiNote(sq: Square) {
   store.updateSquare(sq.id, { aiNote: '' });
+}
+
+// Card-view chip rendering for backtick-delimited tokens. Same syntax the
+// CommentEditor (Tiptap TagNode) uses for editing — `` `text` `` becomes a
+// chip, anything else is plain text. The backticks are dropped in the visible
+// chip but kept in the underlying string, so downstream agents pull tags via
+// `/`([^`]+)`/g` on workspace.json's plain comment field.
+type CommentSegment = { kind: 'text'; value: string } | { kind: 'tag'; value: string };
+function parseCommentSegments(s: string): CommentSegment[] {
+  const segments: CommentSegment[] = [];
+  // Mirrors the editor's regex in `CommentEditor.vue` / `tagNode.ts` —
+  // no whitespace inside the chip.
+  const re = /`([^`\s]+)`/g;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > lastIndex) {
+      segments.push({ kind: 'text', value: s.slice(lastIndex, m.index) });
+    }
+    segments.push({ kind: 'tag', value: m[1] });
+    lastIndex = m.index + m[0].length;
+  }
+  if (lastIndex < s.length) {
+    segments.push({ kind: 'text', value: s.slice(lastIndex) });
+  }
+  return segments;
 }
 
 // Notes rail + leader lines (hover + selection) extracted to a composable.
@@ -495,24 +506,28 @@ const {
         </div>
 
         <!-- comment: editing / card / hint, decided by commentDisplay().
-             A textarea (not an input) so long intent notes wrap instead of
-             scrolling off the side. -->
-        <textarea
-          v-if="commentDisplay(sq) === 'editing'"
-          rows="1"
-          placeholder="Describe this frame's intent…"
-          :value="sq.comment ?? ''"
-          class="block w-full box-border max-w-full text-sm bg-zinc-900 border border-violet-500/60 rounded-lg px-2.5 py-1.5 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-violet-500 resize-none overflow-y-auto overflow-x-hidden no-scrollbar leading-snug break-words"
-          @input="onCommentInput(sq, $event)"
-          @click.stop
-          v-focus
-          v-autosize
-        ></textarea>
+             Editing uses CommentEditor (Tiptap) so `#tag` autocompletes into
+             inline chips live — card view re-renders the same tags as chips
+             from the plain-string data, so edit↔card has no visual jump. -->
+        <div v-if="commentDisplay(sq) === 'editing'" @click.stop>
+          <CommentEditor
+            :model-value="sq.comment ?? ''"
+            placeholder="Describe this frame's intent…"
+            autofocus
+            @update:model-value="(next: string) => onCommentChange(sq, next)"
+          />
+        </div>
         <p
           v-else-if="commentDisplay(sq) === 'card'"
           class="text-sm text-violet-100 bg-violet-900/25 border border-violet-700/40 rounded-lg px-2.5 py-1.5 leading-snug whitespace-pre-wrap break-words"
         >
-          <span class="i-lucide-message-square inline-block mr-1 -mt-0.5 align-middle" />{{ sq.comment }}
+          <span class="i-lucide-message-square inline-block mr-1 -mt-0.5 align-middle" /><template
+            v-for="(seg, i) in parseCommentSegments(sq.comment ?? '')"
+            :key="i"
+          ><span
+              v-if="seg.kind === 'tag'"
+              class="inline-block bg-violet-500/35 border border-violet-300/70 text-violet-50 rounded-md px-1.5 py-0 font-mono text-xs align-baseline"
+            >{{ seg.value }}</span><template v-else>{{ seg.value }}</template></template>
         </p>
         <span v-else class="text-xs text-zinc-600 italic flex items-center gap-1">
           <span class="i-lucide-message-square-plus" />
