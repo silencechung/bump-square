@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/by-silencechung-blue.svg" alt="by silencechung">
 </p>
 
-# bump-square
+# Bump Square
 
 > 我自己用的小工具:畫一張設計截圖,在上面寫意圖,讓 agent 整理成結構,然後把那份意圖**複製給寫 code 的人 / 另一隻 agent**。本身不寫 code。
 >
