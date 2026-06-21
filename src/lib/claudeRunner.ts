@@ -278,6 +278,7 @@ export function runClaude(prompt: string, kind = 'generic', deltaPath?: string):
         // non-zero exit) — agent may have written a partial / broken delta
         // before failing, and we don't want /tmp leaks accumulating.
         let deltaSummaryLine: string | null = null;
+        let deltaApplied = false;
         if (deltaPath) {
           if (code === 0) {
             try {
@@ -285,6 +286,7 @@ export function runClaude(prompt: string, kind = 'generic', deltaPath?: string):
                 const raw = readFileSync(deltaPath, 'utf8');
                 const delta = JSON.parse(raw) as Parameters<typeof applySpecDelta>[0];
                 applySpecDelta(delta);
+                deltaApplied = true;
                 deltaSummaryLine = `\x1b[90m  → applied delta from ${deltaPath}\x1b[0m\r\n`;
               } else {
                 deltaSummaryLine = `\x1b[33m⚠ delta file not written — agent may have skipped Write step\x1b[0m\r\n`;
@@ -305,11 +307,13 @@ export function runClaude(prompt: string, kind = 'generic', deltaPath?: string):
 
         completeAgentEvent(eventId, code ?? -1, lastAssistantText);
         // Stamp `promptVersion` against `tSpawn` (the boardVersion at spawn
-        // time) so subsequent edits make the Spec show as stale. The 0.2.0
-        // single Spec button writes both `prompt.structure` + `prompt.assets`
-        // in one run — one stamp covers the whole spec. (Suggest will stamp
-        // `suggestionsVersion` separately when #11 ships.)
-        if (code === 0 && kind === 'generate-spec') {
+        // time) so subsequent edits make the Spec show as stale. ONLY stamp
+        // if `applySpecDelta` actually ran — if the delta file was missing or
+        // failed to parse, the in-memory spec is still the OLD one, and
+        // stamping would incorrectly clear the stale banner over content
+        // that doesn't match the agent's last run. Suggest (#11) will stamp
+        // `suggestionsVersion` separately on its own success path.
+        if (code === 0 && kind === 'generate-spec' && deltaApplied) {
           stampStructureVersion('prompt', tSpawn);
         }
         g.__bumpClaudeRunning = false;

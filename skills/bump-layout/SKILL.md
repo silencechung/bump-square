@@ -87,10 +87,23 @@ assets markdown (`## Assets`). Pre-0.2.0 split this into two kinds
 `assetsPrompt` fields; both kinds and fields are gone.
 
 **Output budget rules — every extra token slows the run linearly**:
-- **EXACTLY these three sections** in the structure prompt: `## 結構` (tree), `## 節點說明` (per-node lines), `## Assets` (per-node lines for items needing imagery). **No additional sections** — no `★ Insight`, no `## 分析`, no `## 摘要`, no preamble, no closing summary inside the markdown
-- **One line per node** in both `節點說明` and `Assets` — no multi-paragraph descriptions, no nested bullets
-- **No structured analysis blocks** in your `## Assets` either — just the list. Reasoning belongs in your head, not the output
-- Treat the markdown as a **handoff document**, not a report. Downstream agents / humans want signal density, not prose
+- The delta has **two markdown fields**, each with its OWN sections — don't
+  cross them:
+  - `prompt.structure` contains EXACTLY two sections: `## 結構` (ascii tree
+    code fence) + `## 節點說明` (per-node lines)
+  - `prompt.assets` contains EXACTLY one section: `## Assets` (per-node lines
+    for items needing imagery — skip nodes with no asset need)
+  - `prompt.suggestions` is **null** for now (reserved for #11 Suggest agent)
+- **Do not duplicate `## Assets`** — it goes ONLY in `prompt.assets`, never
+  inside `prompt.structure`
+- **No additional sections** anywhere — no `★ Insight`, no `## 分析`, no
+  `## 摘要`, no preamble before / closing summary after the markdown
+- **One line per node** in both `節點說明` and `Assets` — no multi-paragraph
+  descriptions, no nested bullets
+- **No structured analysis blocks** — just the list. Reasoning belongs in
+  your head, not the output
+- Treat the markdown as a **handoff document**, not a report. Downstream
+  agents / humans want signal density, not prose
 
 1. Read `workspace.json`.
 2. Build the containment tree from all squares.

@@ -53,7 +53,7 @@ export interface BumpSquareConfig {
 
 const DEFAULTS: BumpSquareConfig = {
   claude: {
-    model: 'opus',
+    model: 'sonnet',
     allowedTools: ['Read', 'Write', 'Edit'],
     outputFormat: 'stream-json',
     verbose: true,
