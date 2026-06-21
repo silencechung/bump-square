@@ -27,9 +27,11 @@ const tabs = [
 // so what the user sees is exactly what gets handed to the build agent.
 const consoleTree = computed(() => treeToConsole(store.structure.tree));
 
-// Optional agent-authored assets-generation prompt, appended at the very bottom.
+// Assets section of the spec — stored at `structure.prompt.assets` since
+// 0.2.0, written in the same `generate-spec` agent run as `prompt.structure`
+// (one Spec button, one stamp). Rendered after the structure section.
 const assetsSection = computed(() =>
-  store.structure.assetsPrompt ? `\n\n${store.structure.assetsPrompt}` : ''
+  store.structure.prompt.assets ? `\n\n${store.structure.prompt.assets}` : ''
 );
 // What the prompt shows when the user hasn't hand-edited it: tree + assets.
 const derivedPrompt = computed(() => consoleTree.value + assetsSection.value);

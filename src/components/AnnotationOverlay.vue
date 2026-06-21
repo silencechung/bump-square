@@ -214,6 +214,28 @@ const style = computed(() => {
   font-weight: 600;
 }
 
+/* Thin themed scrollbar for the popover itself (long help content overflows
+   `max-h-[60vh]`). Default browser scrollbar is grey and 16px wide — visually
+   out of place against the violet glass-morph backdrop. Auto-hide ish: only
+   the thumb shows, track is transparent. */
+.annotation-popover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(167, 139, 250, 0.35) transparent;
+}
+.annotation-popover::-webkit-scrollbar {
+  width: 6px;
+}
+.annotation-popover::-webkit-scrollbar-track {
+  background: transparent;
+}
+.annotation-popover::-webkit-scrollbar-thumb {
+  background: rgba(167, 139, 250, 0.35);
+  border-radius: 3px;
+}
+.annotation-popover::-webkit-scrollbar-thumb:hover {
+  background: rgba(167, 139, 250, 0.55);
+}
+
 .annotation-enter-active,
 .annotation-leave-active {
   transition: opacity 180ms ease, transform 180ms ease;

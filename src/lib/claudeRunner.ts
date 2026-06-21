@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { readFileSync, unlinkSync, existsSync } from 'node:fs';
 import { loadConfig, claudeArgsFromConfig } from './config';
-import { addAgentEvent, completeAgentEvent, getState, stampStructureVersion } from './serverState';
+import { addAgentEvent, applySpecDelta, completeAgentEvent, getState, stampStructureVersion, sweepZombieAgentEvents } from './serverState';
 
 const MAX_BUFFER_LINES = 10000;
 
@@ -25,6 +26,20 @@ if (g.__bumpClaudeRunningKind === undefined) {
 }
 if (!g.__bumpClaudeQueue) {
   g.__bumpClaudeQueue = [];
+}
+
+// HMR zombie sweep: if this module is re-evaluated mid-run, the original
+// child process's `close` handler is in the OLD closure — gc'd along with
+// the module instance, so we never get notified of exit. The flag stays
+// `true` forever and the event row stays as a forever-spinning "running".
+// On every module init: force-reset the running flag + clear the queue +
+// mark any in-memory "running" events as zombies. Idempotent (clean state
+// is a no-op).
+if (g.__bumpClaudeRunning) {
+  g.__bumpClaudeRunning = false;
+  g.__bumpClaudeRunningKind = null;
+  g.__bumpClaudeQueue = [];
+  sweepZombieAgentEvents();
 }
 
 const queue: Array<() => void> = g.__bumpClaudeQueue;
@@ -149,7 +164,16 @@ function formatStreamEvent(line: string): string | null {
   return null;
 }
 
-export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
+/**
+ * Spawn `claude --print` with the given prompt. If `deltaPath` is set, the
+ * agent is expected to Write its result there (delta protocol — see
+ * `applySpecDelta` in serverState). After the process exits with code 0 we
+ * read the file, parse JSON, merge into state, and cleanup.
+ *
+ * If `deltaPath` is omitted (legacy / non-spec runs), the agent is expected
+ * to mutate workspace.json directly (old behavior).
+ */
+export function runClaude(prompt: string, kind = 'generic', deltaPath?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const task = () => {
       // Open an AgentEvent row before we even spawn — the panel shows the
@@ -222,6 +246,10 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
             if (ev.type === 'assistant') {
               for (const block of ev.message?.content ?? []) {
                 if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+                  // Full text — display truncation lives in `AgentPanel.vue`
+                  // (CSS line-clamp + click-to-expand). Storing full lets the
+                  // user re-read the agent's reasoning even after the live
+                  // terminal stream is gone.
                   lastAssistantText = block.text.trim();
                 }
               }
@@ -240,17 +268,41 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
           ? `\r\n\x1b[32m✓ done (exit 0)\x1b[0m\r\n`
           : `\r\n\x1b[31m✗ exit ${code}\x1b[0m\r\n`;
         pushChunk(msg);
-        completeAgentEvent(eventId, code ?? -1, lastAssistantText);
-        // Stamp the version against `tSpawn` (the boardVersion at spawn time)
-        // so subsequent edits make Prompt show as stale. generate-structure
-        // also clears `assetsPrompt` per the skill — reset its stamp to match.
-        if (code === 0) {
-          if (kind === 'generate-structure') {
-            stampStructureVersion('prompt', tSpawn);
-            stampStructureVersion('assets', null);
-          } else if (kind === 'suggest-assets') {
-            stampStructureVersion('assets', tSpawn);
+
+        // Delta-protocol post-processing: agent wrote its spec to deltaPath
+        // (instead of mutating workspace.json directly). Read + parse + merge
+        // into in-memory state, then cleanup. Tolerant of missing / malformed
+        // files so a failed run doesn't poison the next.
+        let deltaSummaryLine: string | null = null;
+        if (code === 0 && deltaPath) {
+          try {
+            if (existsSync(deltaPath)) {
+              const raw = readFileSync(deltaPath, 'utf8');
+              const delta = JSON.parse(raw) as Parameters<typeof applySpecDelta>[0];
+              applySpecDelta(delta);
+              deltaSummaryLine = `\x1b[90m  → applied delta from ${deltaPath}\x1b[0m\r\n`;
+            } else {
+              deltaSummaryLine = `\x1b[33m⚠ delta file not written — agent may have skipped Write step\x1b[0m\r\n`;
+            }
+          } catch (err) {
+            const m = (err as Error).message;
+            deltaSummaryLine = `\x1b[31m⚠ delta parse failed: ${m}\x1b[0m\r\n`;
           }
+          // Cleanup the temp file regardless of success.
+          try { unlinkSync(deltaPath); } catch { /* already gone — fine */ }
+        }
+        if (deltaSummaryLine) {
+          pushChunk(deltaSummaryLine);
+        }
+
+        completeAgentEvent(eventId, code ?? -1, lastAssistantText);
+        // Stamp `promptVersion` against `tSpawn` (the boardVersion at spawn
+        // time) so subsequent edits make the Spec show as stale. The 0.2.0
+        // single Spec button writes both `prompt.structure` + `prompt.assets`
+        // in one run — one stamp covers the whole spec. (Suggest will stamp
+        // `suggestionsVersion` separately when #11 ships.)
+        if (code === 0 && kind === 'generate-spec') {
+          stampStructureVersion('prompt', tSpawn);
         }
         g.__bumpClaudeRunning = false;
         g.__bumpClaudeRunningKind = null;

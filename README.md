@@ -52,14 +52,14 @@ what code, who does it — none of bump-square's business.
 
 ## 長這樣 / What it looks like
 
-![bump-square Layout 步驟的截圖,左邊是被畫滿紫色 Frame 的設計稿,右邊 Notes rail 在記每一塊的意圖,最右邊 Agent Events panel 顯示剛剛 generate-structure / suggest-assets 的執行紀錄 — bump-square's Layout step: the design screenshot tiled with violet Frames on the left, the Notes rail capturing intent per frame on the right, and the Agent Events panel logging recent generate-structure / suggest-assets runs](public/screenshot.png)
+![bump-square Layout 步驟的截圖,左邊是被畫滿紫色 Frame 的設計稿,右邊 Notes rail 在記每一塊的意圖,最右邊 Agent Events panel 顯示剛剛 generate-spec 的執行紀錄 — bump-square's Layout step: the design screenshot tiled with violet Frames on the left, the Notes rail capturing intent per frame on the right, and the Agent Events panel logging recent generate-spec runs](public/screenshot.png)
 
 中間那塊就是 Layout 步驟:把設計稿當底圖、在上面畫框、右邊 Notes rail 一塊寫一句意圖
 (例如 ``LinkArrow → click open new tab``、``ListWidget → 上下邊線 / `height`: 兩種尺寸 / `padding-left`: 40px``)。
 Comment 編輯器在你打 `` `flex` ``、`` `padding-left` `` 之類的 backtick-wrapped token 時
 會把它變成紫色 chip,順便有 ~250 條 HTML / CSS / Tailwind 字典 popup 提示 — 在 terminal /
-非 IDE 環境寫意圖、語法記不全時用。按 `🧩 產生結構` 後,agent 會根據框的包含關係 +
-你寫的 comment 整理成結構樹,寫進右側 Agent Events panel 看得到的那份 markdown spec。
+非 IDE 環境寫意圖、語法記不全時用。按 `✨ 產生 Spec` 後,agent 一次性根據框的包含關係 +
+你寫的 comment 組出結構樹 + 節點說明 + assets 推論,整份 spec 寫進 Structure tab。
 
 The middle is the Layout step: the design is the backdrop, you draw frames on top, and
 the Notes rail on the right gets one line of intent per frame (e.g. ``LinkArrow → click
@@ -67,8 +67,8 @@ open new tab``, ``ListWidget → top/bottom border / `height`: 2 sizes / `paddin
 The comment editor turns backtick-wrapped tokens like `` `flex` `` or `` `padding-left` ``
 into inline purple chips, with a ~250-entry HTML / CSS / Tailwind autocomplete popup
 for when you're typing intent away from an IDE and can't remember the exact name. Hit
-`🧩 產生結構` and the agent assembles a structure tree from the containment + your
-comments, written into the markdown spec you see in the Agent Events panel.
+`✨ Generate Spec` and the agent assembles the full spec in one pass — structure
+tree + per-node descriptions + assets suggestions — written into the Structure tab.
 
 ## 流程 / Flow
 
@@ -79,7 +79,7 @@ flowchart LR
     C --> D["Copy markdown spec\npaste elsewhere"]
 ```
 
-每次按 [產生結構] 之類的 AI 按鈕,dev server 就 spawn 一隻 `claude --print` 出去
+每次按 [產生 Spec] 之類的 AI 按鈕,dev server 就 spawn 一隻 `claude --print` 出去
 (吃 `/bump-layout` skill),讀寫 `~/.bump-square/workspace.json`。底下 xterm panel
 看得到 agent 即時在幹嘛。沒在跑 agent 的時候,看到的就是純前端。
 
@@ -104,7 +104,7 @@ cd bump-square
 pnpm install
 ```
 
-第一次按 [產生結構] 的時候,如果 `bump-layout` skill 還沒裝,會跳出一鍵安裝 banner
+第一次按 [產生 Spec] 的時候,如果 `bump-layout` skill 還沒裝,會跳出一鍵安裝 banner
 把 repo 裡的 `skills/bump-layout/SKILL.md` 複製到 `~/.claude/skills/`。**手動裝完全不用**。
 
 First time you press [Structure], if the `bump-layout` skill isn't installed yet, a

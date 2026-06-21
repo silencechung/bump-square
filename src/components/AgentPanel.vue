@@ -20,8 +20,7 @@ watch(() => store.agentEvents.length, async () => {
 });
 
 const KIND_ICONS: Record<string, string> = {
-  'generate-structure': 'i-lucide-puzzle',
-  'suggest-assets': 'i-lucide-sparkles',
+  'generate-spec': 'i-lucide-sparkles',
 };
 
 function fmtTime(ts: number) {
@@ -42,6 +41,22 @@ function fmtDuration(startedAt: number, completedAt: number | null): string | nu
 // Newest first — UI mirrors xterm's append-at-bottom by putting fresh action
 // at the top of a side panel. (TerminalPanel is read live; this is history.)
 const events = computed(() => [...store.agentEvents].slice().reverse());
+
+// Per-event expansion state (keyed by event id). Summaries are stored full
+// in workspace.json but rendered collapsed (3-line clamp) by default; click
+// the row to toggle. Map lives in the component because expansion is
+// session-local — no need to persist which rows the user happened to open.
+const expanded = ref<Set<string>>(new Set());
+function toggleExpanded(id: string) {
+  if (expanded.value.has(id)) {
+    expanded.value.delete(id);
+  } else {
+    expanded.value.add(id);
+  }
+  // Force reactivity — Set mutations aren't tracked by ref alone.
+  expanded.value = new Set(expanded.value);
+}
+
 </script>
 
 <template>
@@ -102,9 +117,13 @@ const events = computed(() => [...store.agentEvents].slice().reverse());
             <span v-if="fmtDuration(ev.startedAt, ev.completedAt)" class="text-zinc-600">· {{ fmtDuration(ev.startedAt, ev.completedAt) }}</span>
           </span>
         </div>
-        <p v-if="ev.summary" class="mt-1.5 text-xs text-zinc-300 leading-snug">
-          {{ ev.summary }}
-        </p>
+        <p
+          v-if="ev.summary"
+          class="mt-1.5 text-xs text-zinc-300 leading-snug whitespace-pre-wrap break-words cursor-pointer transition-colors hover:text-zinc-100"
+          :class="expanded.has(ev.id) ? '' : 'line-clamp-3'"
+          :title="expanded.has(ev.id) ? '收合' : '展開完整內容'"
+          @click="toggleExpanded(ev.id)"
+        >{{ ev.summary }}</p>
       </div>
     </div>
 

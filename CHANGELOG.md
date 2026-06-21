@@ -6,6 +6,131 @@ land when they're useful, breaking changes happen when the design shifts.
 
 Dates are local (Asia/Taipei).
 
+## [0.2.0] — 2026-06-21
+
+The "agent only writes the delta" cut. Headline number: a single ✨ Generate
+Spec run dropped from ~180s to ~60s — measured 3× speed-up — by stopping the
+agent from re-echoing the unchanged ~5000-7000 tokens of `workspace.json`
+every time it wrote back. Plus a schema cleanup, button consolidation,
+several UX bugfixes, and HMR survivability for the in-flight agent process.
+
+### Changed
+- **Workspace schema: `structure.prompt` is now a nested object
+  `{ structure, assets, suggestions }`** (was a flat string). The matching
+  `structure.assetsPrompt` field is gone — assets is now `prompt.assets`.
+  Versions consolidated to one stamp: `structure.promptVersion` covers both
+  `structure` and `assets` sections; new `structure.suggestionsVersion` is
+  reserved for the upcoming #11 Suggest button. A one-off migration
+  (`migrateStructurePromptShape` in `src/lib/serverState.ts`) converts old
+  workspaces on load; idempotent.
+- **UI: two AI buttons → one `✨ Generate Spec`.** The 0.1.0 pair
+  (🧩 Structure + ✨ Assets) collapsed into a single button because both
+  always wrote into the same spec and rarely benefited from being independently
+  rerunnable. `generate-structure` + `suggest-assets` agent kinds replaced by
+  a single `generate-spec` that writes structure + assets in one run, shares
+  one `promptVersion`. (#11 Suggest stays a separate button when it ships.)
+- **Delta protocol — agent no longer writes `workspace.json` directly.**
+  Server pre-generates a `/tmp/bump-square-spec-<uuid>.json` path per spawn,
+  passes it in the prompt as `deltaPath:`, and reads + merges + cleans up after
+  process exit (`applySpecDelta` in `src/lib/serverState.ts`). Agent only
+  outputs `{ tree, prompt: { structure, assets } }` — ~3000 tokens instead of
+  ~12000 — saving ~50-90s per run on sonnet. This is the single biggest perf
+  fix in this release.
+- **`--exclude-dynamic-system-prompt-sections` hardcoded into spawn args.**
+  Stops Claude Code's per-machine sections (cwd / env / git status) from
+  invalidating the Anthropic prompt cache prefix on every git change. Cache
+  read = 0.1× input cost, hits on subsequent runs within the 5-min TTL.
+- **Default model `sonnet`** (was `haiku` mid-0.1.x, briefly `opus`). Haiku
+  reached for Bash + scripting too readily; opus was over-spec'd for this
+  workload. Sonnet hits the right quality-vs-latency point given the other
+  perf fixes here.
+- **SKILL.md (`skills/bump-layout/SKILL.md`) tightened**:
+  - Explicit "tools: Read/Write/Edit only — Bash is NOT available; don't
+    write `.mjs` to `/tmp` and try to `node` it". (Resolves the recurring
+    "tool error: command requires approval" loops we saw with haiku.)
+  - "Compute containment with reasoning, do not write scripts" + "expected
+    work = 2 tool calls".
+  - Output budget rules: exactly three sections (`## 結構` / `## 節點說明` /
+    `## Assets`), one-line-per-node, no `★ Insight` or extra analysis
+    blocks. Saves output tokens.
+  - Examples now use generic component names (Header / PrimaryButton /
+    CardGrid), not one user's specific workspace.
+- **CommentEditor `#tag` → `` `tag` `` autocomplete: prefix-match + subsequence
+  fallback.** `` `item-cent` `` now surfaces `items-center` (singular/plural
+  near-miss) even though strict prefix wouldn't match. Subsequence is a
+  fallback after prefix matches; prefix still wins ordering.
+- **Chip styling bumped for contrast** — was `bg-violet-500/15
+  border-violet-500/40 text-violet-200` (washed out against the card's
+  `bg-violet-900/25`); now `bg-violet-500/35 border-violet-300/70
+  text-violet-50`. Readable in both editor (zinc background) and card view
+  (violet background).
+- **AnnotationOverlay scrollbar** — thin themed (`scrollbar-width: thin` +
+  `::-webkit-scrollbar` width 6px, transparent track, violet thumb) instead
+  of the default 16px grey gutter that clashed with the glass-morph backdrop.
+- **AnnotationOverlay popover viewport-overflow detection** — popup flips
+  above the trigger when below would overflow viewport bottom (same pattern
+  the help annotation overlay already used).
+- **TagSuggestion popup viewport-overflow detection** — same as above for the
+  ``\`tag\``` autocomplete: when the caret is near the bottom of the screen
+  the popup opens above instead of below, clamped to viewport.
+- **Agent Events panel: per-event summary collapse/expand.** Summaries
+  preserved in full in `workspace.json` but rendered with `line-clamp-3` by
+  default; click anywhere on the row to toggle. Stops a single long agent
+  summary from drowning the panel.
+
+### Added
+- **`applySpecDelta(delta)`** in `src/lib/serverState.ts` — partial-spec
+  merger for the delta protocol. Tolerant of missing keys (agent may skip a
+  section); doesn't touch fields it wasn't given.
+- **`sweepZombieAgentEvents()`** + auto-sweep in `claudeRunner` module init.
+  HMR survivability — when the dev server reloads `claudeRunner` mid-spawn,
+  the child process's `close` handler closure is gc'd along with the module,
+  so the running event would stay as a forever-spinning row and the queue
+  would block. Sweep marks any in-memory "running" event as orphaned
+  (`exit -1`, summary "(server restart / HMR reload — process orphaned)")
+  and clears the `__bumpClaudeRunning` flag so new spawns can proceed.
+- **TagSuggestion `decorationClass` override** to `bump-tag-trigger` (was
+  default `.suggestion`) + explicit CSS reset, to avoid accidental browser /
+  third-party styling on the suggestion trigger char.
+
+### Fixed
+- **Hand mode no longer allows frame resize.** Selected frame's 8 resize
+  handles are hidden in Hand mode (only render with `drawMode`), and
+  `startResize()` is gated as defense in depth. Matches the "Hand mode =
+  pure pan" intent.
+- **Copy-paste a frame no longer flips Frame mode → Hand mode.** Pre-fix,
+  entering placement mode forced `drawMode.value = false`, leaking out as a
+  mode change after every paste. `placing.value` is already checked first in
+  both pointer-down paths, so the force was unnecessary.
+- **Locale toggle 繁→EN→繁 flicker.** Rapid clicks could race the SSE
+  acknowledgments such that an older toggle's state would overwrite a newer
+  optimistic local update. `pendingLocaleDispatches` counter blocks the SSE
+  apply path for `locale` while a dispatch is in flight.
+- **Single-space chip ``\` \``` no longer matches the TagNode InputRule** —
+  regex tightened from `` /`[^`]+`$/ `` to `` /`[^`\s]+`$/ `` to forbid
+  whitespace-only content. Card-view parser updated symmetrically.
+
+### Removed
+- **`structure.assetsPrompt` field** (flat string) — migrated into
+  `structure.prompt.assets` (nested).
+- **`structure.assetsPromptVersion` field** — collapsed into single
+  `structure.promptVersion` covering the whole spec.
+- **`generate-structure` and `suggest-assets` agent kinds** — replaced by
+  single `generate-spec`.
+- **`header.ai.structure.*` and `header.ai.assets.*` i18n keys** — collapsed
+  to `header.ai.spec.*`.
+
+### Docs
+- **`CLAUDE.md`** — updated for: 0.2.0 schema (nested prompt + version
+  model), single Spec button, delta protocol flow (mermaid diagram redone),
+  load-path migrations, `sweepZombieAgentEvents` rationale.
+- **`README.md`** — Layout step copy updated to single ✨ Generate Spec.
+- **`skills/bump-layout/SKILL.md`** — see Changed above; full rewrite of
+  the Operations + Tools + Important rules sections.
+- **`src/content/help/{en,zh-TW}/{ai-cluster,structure-view,notes-rail}.md`**
+  — annotation popovers updated to reflect single Spec button, nested
+  prompt schema, ``\`tag\``` syntax explanation.
+
 ## [0.1.0] — 2026-06-21
 
 ### Added

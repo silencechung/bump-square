@@ -15,15 +15,19 @@ interface AgentEvent {
 }
 interface SaveMeta { id: string; name: string; savedAt: number; path: string }
 
+interface StructurePrompt {
+  structure: string | null;   // ## 結構 + ## 節點說明 (from generate-spec)
+  assets: string | null;      // ## Assets (from generate-spec, same run)
+  suggestions: string | null; // ## 建議 (reserved for #11 Suggest)
+}
 interface Structure {
   tree: StructureNode | null;
-  prompt: string | null;
-  assetsPrompt: string | null;
-  /** Server-stamped `boardVersion` at the time generate-structure / suggest-
-   * assets last ran. `null` until first run. UI compares against `boardVersion`
-   * to decide whether to flag the prompt as stale. */
+  prompt: StructurePrompt;
+  /** Server-stamped `boardVersion` covering the whole `generate-spec` run
+   * (writes `prompt.structure` + `prompt.assets` together). `null` until first run. */
   promptVersion: number | null;
-  assetsPromptVersion: number | null;
+  /** Server-stamped `boardVersion` for `prompt.suggestions` (future Suggest run). */
+  suggestionsVersion: number | null;
 }
 interface ServerState {
   sourceImage: SourceImage | null;
@@ -56,8 +60,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const assets = ref<Asset[]>([]);
   const squares = ref<Square[]>([]);
   const structure = ref<Structure>({
-    tree: null, prompt: null, assetsPrompt: null,
-    promptVersion: null, assetsPromptVersion: null,
+    tree: null,
+    prompt: { structure: null, assets: null, suggestions: null },
+    promptVersion: null,
+    suggestionsVersion: null,
   });
   const agentEvents = ref<AgentEvent[]>([]);
   const currentSaveId = ref<string | null>(null);
@@ -91,6 +97,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const selectedAsset = computed(() => assets.value.find(a => a.id === selectedAssetId.value));
   const selectedSquare = computed(() => squares.value.find(s => s.id === selectedSquareId.value));
 
+  // Counts setLocale dispatches that haven't been ACKed by their own SSE yet.
+  // Reason: SSE state broadcasts arrive in dispatch order, but if the user
+  // clicks the toggle three times fast (繁→EN→繁), the SSE for click #2
+  // ('zh-TW') arrives AFTER click #3's optimistic update to 'en' — and would
+  // overwrite the user's intended 'en' back to 'zh-TW' for one frame, looking
+  // like a flicker that needs another click to "redo". While any dispatch is
+  // in flight, ignore server locale to keep the local optimistic value.
+  let pendingLocaleDispatches = 0;
+
   function applyServerState(s: ServerState) {
     sourceImage.value = s.sourceImage;
     assets.value = s.assets;
@@ -101,7 +116,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     boardVersion.value = s.boardVersion ?? 0;
     canUndo.value = s.canUndo ?? false;
     canRedo.value = s.canRedo ?? false;
-    if (s.locale) {
+    if (s.locale && pendingLocaleDispatches === 0) {
       locale.value = s.locale;
     }
 
@@ -118,7 +133,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return;
     }
     locale.value = next;
-    dispatch('setLocale', { locale: next });
+    pendingLocaleDispatches++;
+    dispatch('setLocale', { locale: next }).finally(() => {
+      pendingLocaleDispatches--;
+    });
   }
   function toggleLocale() {
     setLocale(locale.value === 'zh-TW' ? 'en' : 'zh-TW');
@@ -133,9 +151,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     && boardVersion.value !== structure.value.promptVersion,
   );
   const isAssetsPromptStale = computed(() =>
-    structure.value.assetsPrompt !== null
-    && structure.value.assetsPromptVersion !== null
-    && boardVersion.value !== structure.value.assetsPromptVersion,
+    structure.value.prompt.assets !== null
+    && structure.value.promptVersion !== null
+    && boardVersion.value !== structure.value.promptVersion,
   );
 
   let es: EventSource | null = null;

@@ -83,23 +83,19 @@ async function copyLatestSavePath() {
   } catch { /* clipboard blocked — ignore silently */ }
 }
 
-// The three claude-calling actions, surfaced together in the header so the
-// user always knows "what the AI can do right now" — visibility is independent
-// of the current step, gated only by data prerequisites.
+// Claude-calling actions, surfaced in the header so the user always knows
+// "what the AI can do right now" — visibility is independent of the current
+// step, gated only by data prerequisites. 0.2.0 collapsed the previous
+// 🧩 Structure + ✨ Assets pair into a single Spec button (both wrote into
+// `structure.prompt.*` anyway, share one `promptVersion`; one click =
+// complete spec); 💡 Suggest is reserved for #11.
 const aiActions = computed(() => [
   {
-    kind: 'generate-structure',
-    label: t('header.ai.structure.label'),
-    runningLabel: t('header.ai.structure.running'),
+    kind: 'generate-spec',
+    label: t('header.ai.spec.label'),
+    runningLabel: t('header.ai.spec.running'),
     canRun: hasSquares.value,
-    why: hasSquares.value ? t('header.ai.structure.why') : t('header.ai.structure.gate'),
-  },
-  {
-    kind: 'suggest-assets',
-    label: t('header.ai.assets.label'),
-    runningLabel: t('header.ai.assets.running'),
-    canRun: hasStructure.value,
-    why: hasStructure.value ? t('header.ai.assets.why') : t('header.ai.assets.gate'),
+    why: hasSquares.value ? t('header.ai.spec.why') : t('header.ai.spec.gate'),
   },
 ]);
 
