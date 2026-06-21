@@ -157,9 +157,9 @@ Do not modify `workspace.json` — server merges the delta in.
 
 **You have exactly three tools: `Read`, `Write`, `Edit`. No others.**
 
-- **`Read`** — read workspace.json (once per run is enough; cache the contents in your reasoning context)
-- **`Write`** — write workspace.json with the updated `structure` sub-object
-- **`Edit`** — **never use on workspace.json** (JSON edits via Edit corrupt partial structure); only use this for non-JSON files if ever needed
+- **`Read`** — read `workspace.json` (the `workspace:` path in the prompt). Once per run is enough; cache the contents in your reasoning context.
+- **`Write`** — write your **spec delta JSON** to `deltaPath` (the path in the prompt). **NOT** `workspace.json` — the server merges your delta in. Writing the whole workspace.json back negates the delta-protocol perf win (5000-7000 extra tokens) and may also confuse server-side state merging.
+- **`Edit`** — **do not use on `workspace.json`** (JSON edits via Edit corrupt partial structure); also unnecessary on the delta file (it's a one-shot write, not an iterative edit). Only relevant for non-JSON files if ever needed.
 
 **Bash is NOT available**, and trying to call it just wastes a turn returning an error. **Do not**:
 - write a `.mjs` / `.js` script to `/tmp` and try to `node` it

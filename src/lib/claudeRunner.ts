@@ -28,19 +28,22 @@ if (!g.__bumpClaudeQueue) {
   g.__bumpClaudeQueue = [];
 }
 
-// HMR zombie sweep: if this module is re-evaluated mid-run, the original
-// child process's `close` handler is in the OLD closure — gc'd along with
-// the module instance, so we never get notified of exit. The flag stays
-// `true` forever and the event row stays as a forever-spinning "running".
-// On every module init: force-reset the running flag + clear the queue +
-// mark any in-memory "running" events as zombies. Idempotent (clean state
-// is a no-op).
-if (g.__bumpClaudeRunning) {
-  g.__bumpClaudeRunning = false;
-  g.__bumpClaudeRunningKind = null;
-  g.__bumpClaudeQueue = [];
-  sweepZombieAgentEvents();
-}
+// Zombie sweep on EVERY module init (HMR re-eval AND cold server start).
+// Two scenarios both need it:
+//   - HMR mid-spawn: child's `close` handler lives in the OLD closure (gc'd
+//     with the module instance), so we never get notified of exit. The
+//     running flag stays `true` and the event row stays as a forever-
+//     spinning "running".
+//   - Cold restart: workspace.json on disk can contain `agentEvents` from a
+//     killed previous process — those `completedAt: null` rows would render
+//     as permanent spinners too.
+// Either way: reset the running flag + clear the queue + mark zombies.
+// `sweepZombieAgentEvents` is idempotent on clean state (no completedAt:null
+// rows = no-op), so this is safe to run unconditionally.
+g.__bumpClaudeRunning = false;
+g.__bumpClaudeRunningKind = null;
+g.__bumpClaudeQueue = [];
+sweepZombieAgentEvents();
 
 const queue: Array<() => void> = g.__bumpClaudeQueue;
 
@@ -270,25 +273,30 @@ export function runClaude(prompt: string, kind = 'generic', deltaPath?: string):
         pushChunk(msg);
 
         // Delta-protocol post-processing: agent wrote its spec to deltaPath
-        // (instead of mutating workspace.json directly). Read + parse + merge
-        // into in-memory state, then cleanup. Tolerant of missing / malformed
-        // files so a failed run doesn't poison the next.
+        // (instead of mutating workspace.json directly). On exit code 0, read
+        // + parse + merge into in-memory state. Cleanup ALWAYS runs (even on
+        // non-zero exit) — agent may have written a partial / broken delta
+        // before failing, and we don't want /tmp leaks accumulating.
         let deltaSummaryLine: string | null = null;
-        if (code === 0 && deltaPath) {
-          try {
-            if (existsSync(deltaPath)) {
-              const raw = readFileSync(deltaPath, 'utf8');
-              const delta = JSON.parse(raw) as Parameters<typeof applySpecDelta>[0];
-              applySpecDelta(delta);
-              deltaSummaryLine = `\x1b[90m  → applied delta from ${deltaPath}\x1b[0m\r\n`;
-            } else {
-              deltaSummaryLine = `\x1b[33m⚠ delta file not written — agent may have skipped Write step\x1b[0m\r\n`;
+        if (deltaPath) {
+          if (code === 0) {
+            try {
+              if (existsSync(deltaPath)) {
+                const raw = readFileSync(deltaPath, 'utf8');
+                const delta = JSON.parse(raw) as Parameters<typeof applySpecDelta>[0];
+                applySpecDelta(delta);
+                deltaSummaryLine = `\x1b[90m  → applied delta from ${deltaPath}\x1b[0m\r\n`;
+              } else {
+                deltaSummaryLine = `\x1b[33m⚠ delta file not written — agent may have skipped Write step\x1b[0m\r\n`;
+              }
+            } catch (err) {
+              const m = (err as Error).message;
+              deltaSummaryLine = `\x1b[31m⚠ delta parse failed: ${m}\x1b[0m\r\n`;
             }
-          } catch (err) {
-            const m = (err as Error).message;
-            deltaSummaryLine = `\x1b[31m⚠ delta parse failed: ${m}\x1b[0m\r\n`;
           }
-          // Cleanup the temp file regardless of success.
+          // Cleanup runs on success AND failure — agent may have written a
+          // partial delta before exiting non-zero. `unlinkSync` is a no-op
+          // when the file doesn't exist (we catch ENOENT).
           try { unlinkSync(deltaPath); } catch { /* already gone — fine */ }
         }
         if (deltaSummaryLine) {

@@ -25,7 +25,7 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n';
 const CONFIG_PATH = resolve(homedir(), '.bump-square', 'config.json');
 
 export interface ClaudeConfig {
-  /** --model: opus (default), sonnet, haiku, or any string Claude Code accepts. */
+  /** --model: sonnet (default), haiku, opus, or any string Claude Code accepts. */
   model: string;
   /** --allowedTools (comma-joined for the CLI). Defaults to Read/Write/Edit —
    * the bump-layout skill only needs to touch workspace.json. Add 'Bash' or

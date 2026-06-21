@@ -120,12 +120,20 @@ const SAVE_DEBOUNCE_MS = 400;
  * 0.2.0 schema migration:
  *   flat `structure.prompt: string` + `structure.assetsPrompt: string`
  *   → nested `structure.prompt: { structure, assets, suggestions }`
- *   and `promptVersion` / `assetsPromptVersion` → `structureVersion` /
- *   `assetsVersion` / `suggestionsVersion` (the latter reserved for #11).
  *
- * After 0.2.0, a single `generate-spec` kind writes both `prompt.structure`
- * and `prompt.assets` in one run, sharing `promptVersion`. Suggest (#11) gets
- * its own `suggestionsVersion` slot since it's a separate button.
+ * Versions collapse to two slots:
+ *   - `promptVersion` (unified) — covers `prompt.structure` + `prompt.assets`.
+ *     We take the OLDER of old `promptVersion` / `assetsPromptVersion` because
+ *     if either section was generated against an older board, the combined
+ *     spec is at least that stale.
+ *   - `suggestionsVersion` (new, initialized null) — reserved for the future
+ *     #11 Suggest agent kind which writes `prompt.suggestions` on its own
+ *     stamp.
+ *
+ * Why one unified `promptVersion` (not three): 0.2.0's single `generate-spec`
+ * agent kind writes both `prompt.structure` and `prompt.assets` in one run
+ * — one stamp is correct. (Pre-0.2.0 split the work across two independent
+ * kinds; the migration absorbs that into one stamp going forward.)
  *
  * Idempotent: if `prompt` is already an object (new shape), bail. Safe to
  * run on every load AND every fs.watch reload (in case an agent wrote the
