@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { runClaude, isRunning } from '~src/lib/claudeRunner';
 import { getState, workspacePath } from '~src/lib/serverState';
 import { crossOriginBlocked } from '~src/lib/guard';
@@ -10,21 +11,26 @@ const SKILL_INSTALL_PATH = resolve(homedir(), '.claude', 'skills', 'bump-layout'
 
 export const prerender = false;
 
-const PROMPTS: Record<string, (state: ReturnType<typeof getState>) => string> = {
-  'generate-structure': (s) => {
+const PROMPTS: Record<string, (state: ReturnType<typeof getState>, deltaPath: string) => string> = {
+  'generate-spec': (s, deltaPath) => {
     const frameCount = s.squares.length;
     return `/bump-layout
 workspace: ${workspacePath}
+deltaPath: ${deltaPath}
 判斷 containment 時容忍幾個 px 的偏差(使用者在小尺寸截圖上不好精準拉線) — 但這個容差**只是內部判斷依據,不要寫進輸出的 prompt / tree 裡**。最終 markdown 的節點說明只描述「這是什麼元件、它的意圖」,不要出現座標、x/y 數字、或「幾何上 / x≈xxx」這種字眼。
 目前有 ${frameCount} 個 Frame。
-依各 Frame 的 containment(包含關係)與 comment(使用者意圖)產生意圖結構樹。
-完成後更新 workspace.json 的 structure 欄位(tree + prompt)。`;
+依各 Frame 的 containment(包含關係)與 comment(使用者意圖)產生**整份 spec**(結構 + 節點說明 + assets 推論),一次寫完。
+**完成後 Write 一份 delta JSON 到 deltaPath**(**不要動 workspace.json** — server 端會把 delta 套進去,你只需要輸出新欄位即可,大幅省 output token)。Delta 格式:
+\`\`\`json
+{
+  "tree": <StructureNode>,
+  "prompt": {
+    "structure": "## 結構\\n\\n\`\`\`\\n<ascii tree>\\n\`\`\`\\n\\n## 節點說明\\n\\n- **Label** type — intent…",
+    "assets": "## Assets\\n\\n- **Label** — 素材需求…"
+  }
+}
+\`\`\``;
   },
-  'suggest-assets': (_s) =>
-    `/bump-layout
-workspace: ${workspacePath}
-根據目前的 structure.tree 推敲每個節點需要的視覺素材。
-完成後更新 workspace.json 的 structure.assetsPrompt 欄位（markdown 格式）。`,
 };
 
 export const POST: APIRoute = async ({ request }) => {
@@ -60,12 +66,17 @@ export const POST: APIRoute = async ({ request }) => {
     }), { status: 409, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const prompt = PROMPTS[kind](getState());
+  // Delta-protocol: pre-generate a unique temp path; agent writes its result
+  // there, server reads + merges + cleans up after `claude --print` exits.
+  // Saves the 5000-7000 unchanged-token re-echo that Write-the-whole-file
+  // would cost.
+  const deltaPath = resolve(tmpdir(), `bump-square-spec-${randomUUID()}.json`);
+  const prompt = PROMPTS[kind](getState(), deltaPath);
 
   // Fire-and-forget: respond 202 immediately; claude streams via /api/terminal/events.
   // Pass kind so the runner can broadcast it on status events — buttons key off
   // matching kind so only the one you pressed shows a spinner.
-  runClaude(prompt, kind).catch((err) => console.error('[run-claude] error:', err));
+  runClaude(prompt, kind, deltaPath).catch((err) => console.error('[run-claude] error:', err));
 
   return new Response(JSON.stringify({ ok: true, running: isRunning(), kind }), {
     status: 202,

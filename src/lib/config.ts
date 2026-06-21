@@ -25,7 +25,7 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n';
 const CONFIG_PATH = resolve(homedir(), '.bump-square', 'config.json');
 
 export interface ClaudeConfig {
-  /** --model: haiku (default), sonnet, opus, or any string Claude Code accepts. */
+  /** --model: sonnet (default), haiku, opus, or any string Claude Code accepts. */
   model: string;
   /** --allowedTools (comma-joined for the CLI). Defaults to Read/Write/Edit —
    * the bump-layout skill only needs to touch workspace.json. Add 'Bash' or
@@ -53,7 +53,7 @@ export interface BumpSquareConfig {
 
 const DEFAULTS: BumpSquareConfig = {
   claude: {
-    model: 'haiku',
+    model: 'sonnet',
     allowedTools: ['Read', 'Write', 'Edit'],
     outputFormat: 'stream-json',
     verbose: true,
@@ -113,5 +113,16 @@ export function claudeArgsFromConfig(cfg: ClaudeConfig): string[] {
   if (cfg.verbose) {
     args.push('--verbose');
   }
+  // Always pass this flag. Without it, Claude Code's default system prompt
+  // bakes in dynamic per-machine sections (cwd, env info, memory paths,
+  // git status) — every git change invalidates the cache prefix and we
+  // re-pay full prefill cost. With it, those sections move to the first
+  // user message and the system-prompt prefix stays byte-stable, so
+  // Anthropic's 5-minute prompt cache actually hits on subsequent runs
+  // (cache read = 0.1x input cost; first write = 1.25x — net win on any
+  // repeat press within the TTL). Hardcoded (not configurable) because
+  // it's a pure improvement for this app's call pattern — no scenario
+  // where you'd want the prefix tied to git status.
+  args.push('--exclude-dynamic-system-prompt-sections');
   return args;
 }

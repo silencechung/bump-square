@@ -23,16 +23,26 @@ const tabs = [
   { id: 'prompt', label: 'Prompt' },
 ] as const;
 
-// The agent handoff: a console tree auto-derived from the confirmed structure,
-// so what the user sees is exactly what gets handed to the build agent.
+// Fallback rendering when the agent hasn't written a structure markdown yet
+// (`structure.prompt.structure` null) — derive an ascii tree from
+// `structure.tree` so the user still sees SOMETHING after just clicking
+// frames around, before they ever press ✨ Generate Spec.
 const consoleTree = computed(() => treeToConsole(store.structure.tree));
 
-// Optional agent-authored assets-generation prompt, appended at the very bottom.
-const assetsSection = computed(() =>
-  store.structure.assetsPrompt ? `\n\n${store.structure.assetsPrompt}` : ''
+// Spec sections, written by `generate-spec` into the nested prompt object
+// since 0.2.0. Prefer the agent-authored markdown (it includes `## 結構` +
+// `## 節點說明` with intent prose); only fall back to the bare tree if the
+// agent hasn't run yet. Concatenate structure + assets at render time —
+// they're stored separately for granularity but always handed off as one
+// spec markdown.
+const structureSection = computed(() =>
+  store.structure.prompt.structure ?? consoleTree.value
 );
-// What the prompt shows when the user hasn't hand-edited it: tree + assets.
-const derivedPrompt = computed(() => consoleTree.value + assetsSection.value);
+const assetsSection = computed(() =>
+  store.structure.prompt.assets ? `\n\n${store.structure.prompt.assets}` : ''
+);
+// What the prompt shows when the user hasn't hand-edited it.
+const derivedPrompt = computed(() => structureSection.value + assetsSection.value);
 
 // The prompt is EDITABLE before sending: promptDraft is null until the user
 // types, in which case it overrides the derived content. effectivePrompt is

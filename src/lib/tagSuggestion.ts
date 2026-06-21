@@ -112,8 +112,18 @@ export const TagSuggestion = Extension.create({
             if (!popupEl || !rect) {
               return;
             }
+            // Default below caret; flip above if it would overflow viewport
+            // bottom. Measure AFTER append so `offsetHeight` is real. Same
+            // pattern as `AnnotationOverlay`'s placement logic.
             popupEl.style.left = `${rect.left}px`;
-            popupEl.style.top = `${rect.bottom + 4}px`;
+            popupEl.style.top = '0px'; // temp so we can measure clean height
+            const popupHeight = popupEl.offsetHeight;
+            const gap = 4;
+            const wouldOverflowBottom = rect.bottom + gap + popupHeight > window.innerHeight;
+            const top = wouldOverflowBottom
+              ? Math.max(gap, rect.top - gap - popupHeight)
+              : rect.bottom + gap;
+            popupEl.style.top = `${top}px`;
           }
 
           return {

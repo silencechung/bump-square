@@ -334,9 +334,12 @@ const {
         @dragover="onSquareDragOver($event, sq.id)"
         @drop="onSquareDrop($event, sq.id)"
       >
-        <!-- Resize handles: only on the selected frame. Drag to grow/shrink the
-             frame's bounds (放大縮小框限). Each anchors the opposite edge. -->
-        <template v-if="store.selectedSquareId === sq.id">
+        <!-- Resize handles: only on the selected frame, and only in Frame
+             mode. Hand mode is pure pan — no frame mutation allowed, so
+             showing inactive handles would be misleading. Selection itself
+             (click → highlight) still works in Hand mode for visual
+             reference. -->
+        <template v-if="store.selectedSquareId === sq.id && drawMode">
           <div
             v-for="hd in RESIZE_HANDLES"
             :key="hd.h"

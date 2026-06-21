@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { readFileSync, unlinkSync, existsSync } from 'node:fs';
 import { loadConfig, claudeArgsFromConfig } from './config';
-import { addAgentEvent, completeAgentEvent, getState, stampStructureVersion } from './serverState';
+import { addAgentEvent, applySpecDelta, completeAgentEvent, getState, stampStructureVersion, sweepZombieAgentEvents } from './serverState';
 
 const MAX_BUFFER_LINES = 10000;
 
@@ -26,6 +27,23 @@ if (g.__bumpClaudeRunningKind === undefined) {
 if (!g.__bumpClaudeQueue) {
   g.__bumpClaudeQueue = [];
 }
+
+// Zombie sweep on EVERY module init (HMR re-eval AND cold server start).
+// Two scenarios both need it:
+//   - HMR mid-spawn: child's `close` handler lives in the OLD closure (gc'd
+//     with the module instance), so we never get notified of exit. The
+//     running flag stays `true` and the event row stays as a forever-
+//     spinning "running".
+//   - Cold restart: workspace.json on disk can contain `agentEvents` from a
+//     killed previous process — those `completedAt: null` rows would render
+//     as permanent spinners too.
+// Either way: reset the running flag + clear the queue + mark zombies.
+// `sweepZombieAgentEvents` is idempotent on clean state (no completedAt:null
+// rows = no-op), so this is safe to run unconditionally.
+g.__bumpClaudeRunning = false;
+g.__bumpClaudeRunningKind = null;
+g.__bumpClaudeQueue = [];
+sweepZombieAgentEvents();
 
 const queue: Array<() => void> = g.__bumpClaudeQueue;
 
@@ -149,7 +167,16 @@ function formatStreamEvent(line: string): string | null {
   return null;
 }
 
-export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
+/**
+ * Spawn `claude --print` with the given prompt. If `deltaPath` is set, the
+ * agent is expected to Write its result there (delta protocol — see
+ * `applySpecDelta` in serverState). After the process exits with code 0 we
+ * read the file, parse JSON, merge into state, and cleanup.
+ *
+ * If `deltaPath` is omitted (legacy / non-spec runs), the agent is expected
+ * to mutate workspace.json directly (old behavior).
+ */
+export function runClaude(prompt: string, kind = 'generic', deltaPath?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const task = () => {
       // Open an AgentEvent row before we even spawn — the panel shows the
@@ -222,6 +249,10 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
             if (ev.type === 'assistant') {
               for (const block of ev.message?.content ?? []) {
                 if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+                  // Full text — display truncation lives in `AgentPanel.vue`
+                  // (CSS line-clamp + click-to-expand). Storing full lets the
+                  // user re-read the agent's reasoning even after the live
+                  // terminal stream is gone.
                   lastAssistantText = block.text.trim();
                 }
               }
@@ -240,17 +271,50 @@ export function runClaude(prompt: string, kind = 'generic'): Promise<void> {
           ? `\r\n\x1b[32m✓ done (exit 0)\x1b[0m\r\n`
           : `\r\n\x1b[31m✗ exit ${code}\x1b[0m\r\n`;
         pushChunk(msg);
-        completeAgentEvent(eventId, code ?? -1, lastAssistantText);
-        // Stamp the version against `tSpawn` (the boardVersion at spawn time)
-        // so subsequent edits make Prompt show as stale. generate-structure
-        // also clears `assetsPrompt` per the skill — reset its stamp to match.
-        if (code === 0) {
-          if (kind === 'generate-structure') {
-            stampStructureVersion('prompt', tSpawn);
-            stampStructureVersion('assets', null);
-          } else if (kind === 'suggest-assets') {
-            stampStructureVersion('assets', tSpawn);
+
+        // Delta-protocol post-processing: agent wrote its spec to deltaPath
+        // (instead of mutating workspace.json directly). On exit code 0, read
+        // + parse + merge into in-memory state. Cleanup ALWAYS runs (even on
+        // non-zero exit) — agent may have written a partial / broken delta
+        // before failing, and we don't want /tmp leaks accumulating.
+        let deltaSummaryLine: string | null = null;
+        let deltaApplied = false;
+        if (deltaPath) {
+          if (code === 0) {
+            try {
+              if (existsSync(deltaPath)) {
+                const raw = readFileSync(deltaPath, 'utf8');
+                const delta = JSON.parse(raw) as Parameters<typeof applySpecDelta>[0];
+                applySpecDelta(delta);
+                deltaApplied = true;
+                deltaSummaryLine = `\x1b[90m  → applied delta from ${deltaPath}\x1b[0m\r\n`;
+              } else {
+                deltaSummaryLine = `\x1b[33m⚠ delta file not written — agent may have skipped Write step\x1b[0m\r\n`;
+              }
+            } catch (err) {
+              const m = (err as Error).message;
+              deltaSummaryLine = `\x1b[31m⚠ delta parse failed: ${m}\x1b[0m\r\n`;
+            }
           }
+          // Cleanup runs on success AND failure — agent may have written a
+          // partial delta before exiting non-zero. `unlinkSync` is a no-op
+          // when the file doesn't exist (we catch ENOENT).
+          try { unlinkSync(deltaPath); } catch { /* already gone — fine */ }
+        }
+        if (deltaSummaryLine) {
+          pushChunk(deltaSummaryLine);
+        }
+
+        completeAgentEvent(eventId, code ?? -1, lastAssistantText);
+        // Stamp `promptVersion` against `tSpawn` (the boardVersion at spawn
+        // time) so subsequent edits make the Spec show as stale. ONLY stamp
+        // if `applySpecDelta` actually ran — if the delta file was missing or
+        // failed to parse, the in-memory spec is still the OLD one, and
+        // stamping would incorrectly clear the stale banner over content
+        // that doesn't match the agent's last run. Suggest (#11) will stamp
+        // `suggestionsVersion` separately on its own success path.
+        if (code === 0 && kind === 'generate-spec' && deltaApplied) {
+          stampStructureVersion('prompt', tSpawn);
         }
         g.__bumpClaudeRunning = false;
         g.__bumpClaudeRunningKind = null;

@@ -23,11 +23,27 @@ import { loadConfig, saveLocale } from './config';
  * TerminalPanel; this is the at-a-glance history, not the conversation. */
 export interface AgentEvent {
   id: string;
-  kind: string;            // 'generate-structure' | 'suggest-assets' | …
+  kind: string;            // 'generate-spec' | (future: 'suggest-improvements')
   startedAt: number;
   completedAt: number | null;
   exitCode: number | null; // 0 = ok, non-zero / -1 = failed
   summary: string | null;  // last assistant text block, used as the row's blurb
+}
+
+/**
+ * Agent-authored prompt sections, all markdown. One field per agent kind so
+ * adding a new kind (e.g. Suggest, #11) is a schema extension not a rename.
+ * `null` until the first generation of that section.
+ */
+export interface StructurePrompt {
+  /** ## 結構 + ## 節點說明 — written by the Spec button (`generate-spec`). */
+  structure: string | null;
+  /** ## Assets — written by the Spec button (`generate-spec`); merged into
+   * the same agent run so both sections share a version stamp. */
+  assets: string | null;
+  /** ## 建議 — written by the Suggest button (`suggest-improvements`, #11).
+   * Reserved now so 0.2.0 can ship the schema without re-cutting later. */
+  suggestions: string | null;
 }
 
 export interface WorkspaceState {
@@ -36,14 +52,16 @@ export interface WorkspaceState {
   squares: Square[];
   structure: {
     tree: StructureNode | null;
-    prompt: string | null;
-    assetsPrompt: string | null;
-    /** `boardVersion` captured at the moment generate-structure was spawned.
-     * UI compares this against the current `boardVersion` to flag the prompt
-     * as out-of-date after any board edit. `null` until the first generation. */
+    /** Sectioned markdown prompts — see `StructurePrompt`. */
+    prompt: StructurePrompt;
+    /** `boardVersion` captured when the `generate-spec` agent run was spawned.
+     * Covers BOTH `prompt.structure` and `prompt.assets` since 0.2.0's single
+     * Spec button writes both sections in one run. UI compares against current
+     * `boardVersion` to flag the spec as out-of-date after any board edit. */
     promptVersion: number | null;
-    /** Same idea for the agent-authored assets prompt. */
-    assetsPromptVersion: number | null;
+    /** `boardVersion` for the Suggest agent run — `prompt.suggestions` stamp.
+     * Independent of `promptVersion` because Suggest is a separate button. */
+    suggestionsVersion: number | null;
   };
   agentEvents: AgentEvent[];
   /** The save the live workspace originated from (if loaded via SavesMenu).
@@ -65,8 +83,10 @@ function emptyState(): WorkspaceState {
     assets: [],
     squares: [],
     structure: {
-      tree: null, prompt: null, assetsPrompt: null,
-      promptVersion: null, assetsPromptVersion: null,
+      tree: null,
+      prompt: { structure: null, assets: null, suggestions: null },
+      promptVersion: null,
+      suggestionsVersion: null,
     },
     agentEvents: [],
     currentSaveId: null,
@@ -96,6 +116,72 @@ const SAVE_DEBOUNCE_MS = 400;
  *
  * Idempotent: re-running on a clean comment is a no-op.
  */
+/**
+ * 0.2.0 schema migration:
+ *   flat `structure.prompt: string` + `structure.assetsPrompt: string`
+ *   → nested `structure.prompt: { structure, assets, suggestions }`
+ *
+ * Versions collapse to two slots:
+ *   - `promptVersion` (unified) — covers `prompt.structure` + `prompt.assets`.
+ *     We take the OLDER of old `promptVersion` / `assetsPromptVersion` because
+ *     if either section was generated against an older board, the combined
+ *     spec is at least that stale.
+ *   - `suggestionsVersion` (new, initialized null) — reserved for the future
+ *     #11 Suggest agent kind which writes `prompt.suggestions` on its own
+ *     stamp.
+ *
+ * Why one unified `promptVersion` (not three): 0.2.0's single `generate-spec`
+ * agent kind writes both `prompt.structure` and `prompt.assets` in one run
+ * — one stamp is correct. (Pre-0.2.0 split the work across two independent
+ * kinds; the migration absorbs that into one stamp going forward.)
+ *
+ * Idempotent: if `prompt` is already an object (new shape), bail. Safe to
+ * run on every load AND every fs.watch reload (in case an agent wrote the
+ * old shape from cache).
+ */
+function migrateStructurePromptShape(s: WorkspaceState): WorkspaceState {
+  // `s.structure.prompt` could be a string (old shape) or a `StructurePrompt`
+  // object (new shape). Parsed-from-disk types lie, so runtime-check.
+  const rawPrompt: unknown = (s.structure as unknown as { prompt: unknown }).prompt;
+  const rawAssets: unknown = (s.structure as unknown as { assetsPrompt?: unknown }).assetsPrompt;
+  const rawPromptVer: unknown = (s.structure as unknown as { promptVersion?: unknown }).promptVersion;
+  const rawAssetsVer: unknown = (s.structure as unknown as { assetsPromptVersion?: unknown }).assetsPromptVersion;
+
+  // Already migrated — bail.
+  if (rawPrompt !== null && typeof rawPrompt === 'object' && !Array.isArray(rawPrompt)) {
+    return s;
+  }
+
+  // Old shape detected (prompt is a string or null). Build the nested form.
+  const structureText: string | null = typeof rawPrompt === 'string' ? rawPrompt : null;
+  const assetsText: string | null = typeof rawAssets === 'string' ? rawAssets : null;
+
+  s.structure.prompt = {
+    structure: structureText,
+    assets: assetsText,
+    suggestions: null,
+  };
+
+  // Unify old promptVersion + assetsPromptVersion into one `promptVersion`.
+  // Take the OLDER (smaller) — if either section was generated against an
+  // older board, the combined prompt is at least that stale.
+  const oldPromptVer = typeof rawPromptVer === 'number' ? rawPromptVer : null;
+  const oldAssetsVer = typeof rawAssetsVer === 'number' ? rawAssetsVer : null;
+  if (oldPromptVer !== null && oldAssetsVer !== null) {
+    s.structure.promptVersion = Math.min(oldPromptVer, oldAssetsVer);
+  } else {
+    s.structure.promptVersion = oldPromptVer ?? oldAssetsVer ?? null;
+  }
+  s.structure.suggestionsVersion = null;
+
+  // Drop the dead fields off the runtime object so they don't accidentally
+  // re-serialize.
+  delete (s.structure as unknown as { assetsPrompt?: unknown }).assetsPrompt;
+  delete (s.structure as unknown as { assetsPromptVersion?: unknown }).assetsPromptVersion;
+
+  return s;
+}
+
 function normalizeCommentNewlines(s: WorkspaceState): WorkspaceState {
   for (const sq of s.squares) {
     if (sq.comment) {
@@ -117,7 +203,11 @@ function loadFromDisk(): WorkspaceState | null {
     const parsed = JSON.parse(raw) as Partial<WorkspaceState>;
     // Merge onto a fresh empty state so missing/new fields stay well-formed.
     const merged = { ...emptyState(), ...parsed };
-    return normalizeCommentNewlines(merged);
+    // Migrations run on every load (idempotent). Order matters only for
+    // independence — neither touches the other's fields.
+    migrateStructurePromptShape(merged);
+    normalizeCommentNewlines(merged);
+    return merged;
   } catch (err) {
     console.error('[bump-square] Failed to load workspace.json, starting empty:', err);
     return null;
@@ -204,12 +294,16 @@ scheduleSave();
         // — for these fields, in-memory always wins).
         const inMem = {
           promptVersion: state.structure.promptVersion,
-          assetsPromptVersion: state.structure.assetsPromptVersion,
+          suggestionsVersion: state.structure.suggestionsVersion,
           boardVersion: state.boardVersion,
         };
         Object.assign(state, { ...emptyState(), ...parsed });
+        // Apply migrations to whatever the agent / external tool wrote (in
+        // case it used the old shape).
+        migrateStructurePromptShape(state);
+        normalizeCommentNewlines(state);
         state.structure.promptVersion = inMem.promptVersion;
-        state.structure.assetsPromptVersion = inMem.assetsPromptVersion;
+        state.structure.suggestionsVersion = inMem.suggestionsVersion;
         state.boardVersion = inMem.boardVersion;
         bus.emit('change', state);
       } catch { /* mid-write or parse error — skip */ }
@@ -253,16 +347,22 @@ export function mutate(
   return state;
 }
 
-/** Stamp the `structure.<field>Version` to whatever `boardVersion` was when
- * the agent started. Called by `claudeRunner` on successful completion; not a
- * board edit itself (no history, no boardVersion bump). */
-export function stampStructureVersion(field: 'prompt' | 'assets', version: number | null) {
+/** Stamp the matching `structure.<field>Version` to whatever `boardVersion`
+ * was when the agent started. Called by `claudeRunner` on successful
+ * completion; not a board edit itself (no history, no boardVersion bump).
+ *
+ * `prompt` covers `structure.prompt.structure` + `structure.prompt.assets`
+ * (the single `generate-spec` kind writes both in one run).
+ * `suggestions` is the future Suggest agent run's own stamp (#11). */
+export function stampStructureVersion(
+  field: 'prompt' | 'suggestions',
+  version: number | null,
+) {
   mutate(s => {
     if (field === 'prompt') {
       s.structure.promptVersion = version;
-    }
-    else {
-      s.structure.assetsPromptVersion = version;
+    } else {
+      s.structure.suggestionsVersion = version;
     }
   }, { history: false, bumpVersion: false });
 }
@@ -321,9 +421,14 @@ export function setLocale(next: Locale): void {
   bus.emit('change', state);
 }
 
+/** Maximum agent events kept in the session log. Each entry's `summary` is
+ * already truncated to the first paragraph (≤280 chars) at capture time in
+ * `claudeRunner`, so the panel stays browsable even at this larger cap. */
+const AGENT_EVENTS_CAP = 50;
+
 /** Record the start of a `claude --print` run. Returns the new event id so the
  * caller can call completeAgentEvent on it when the child closes. Caps the
- * log at 50 entries (drops oldest). */
+ * log at AGENT_EVENTS_CAP (drops oldest). */
 export function addAgentEvent(kind: string): string {
   const id = uuid();
   mutate(s => {
@@ -334,7 +439,7 @@ export function addAgentEvent(kind: string): string {
       exitCode: null,
       summary: null,
     });
-    if (s.agentEvents.length > 50) {
+    while (s.agentEvents.length > AGENT_EVENTS_CAP) {
       s.agentEvents.shift();
     }
   }, { history: false });
@@ -354,6 +459,63 @@ export function completeAgentEvent(id: string, exitCode: number, summary: string
     ev.exitCode = exitCode;
     if (summary) {
       ev.summary = summary;
+    }
+  }, { history: false });
+}
+
+/**
+ * Apply a partial spec produced by the agent (delta-file protocol). Only the
+ * fields agent owns get merged — `tree`, `prompt.structure`, `prompt.assets`,
+ * `prompt.suggestions`. Everything else in `structure` (versions) and
+ * everything else in `WorkspaceState` (squares, sourceImage, …) is preserved
+ * server-side, so the agent doesn't pay the output-token cost of re-emitting
+ * unchanged state every Write.
+ *
+ * Pre-0.3.0 the agent wrote the whole workspace.json back via Write; that
+ * meant ~5000-7000 tokens of unchanged-but-re-echoed JSON per run (squares
+ * positions, agentEvents log, image metadata, …) — 50%+ of output time wasted
+ * on copying. Delta protocol cuts the agent's Write payload to just the new
+ * spec content (~3000 tokens) — single biggest single-run latency improvement.
+ *
+ * Tolerant of missing keys (agent may omit `prompt.assets` etc. if it only
+ * regenerated one section): we merge field-by-field, don't replace the
+ * whole `prompt` object wholesale.
+ */
+export function applySpecDelta(delta: {
+  tree?: StructureNode | null;
+  prompt?: Partial<StructurePrompt>;
+}) {
+  mutate(s => {
+    if (delta.tree !== undefined) {
+      s.structure.tree = delta.tree;
+    }
+    if (delta.prompt) {
+      if (delta.prompt.structure !== undefined) {
+        s.structure.prompt.structure = delta.prompt.structure;
+      }
+      if (delta.prompt.assets !== undefined) {
+        s.structure.prompt.assets = delta.prompt.assets;
+      }
+      if (delta.prompt.suggestions !== undefined) {
+        s.structure.prompt.suggestions = delta.prompt.suggestions;
+      }
+    }
+  }, { history: false, bumpVersion: false });
+}
+
+/** Mark any in-flight agent event as a zombie (failed, no summary). Used at
+ * server boot / claudeRunner module init — across an HMR reload, the original
+ * child process closure (with its `close` handler) is gone, so a "running"
+ * event from before is guaranteed dead. Without this, stale spinners stay
+ * forever and the running-flag stays true → new spawns get blocked in queue. */
+export function sweepZombieAgentEvents() {
+  mutate(s => {
+    for (const ev of s.agentEvents) {
+      if (ev.completedAt === null) {
+        ev.completedAt = Date.now();
+        ev.exitCode = -1;
+        ev.summary = '(server restart / HMR reload — process orphaned)';
+      }
     }
   }, { history: false });
 }

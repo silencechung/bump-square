@@ -98,6 +98,12 @@ export function useFrameInteractions(
   }
 
   function startResize(sq: Square, handle: string, e: MouseEvent) {
+    // Hand mode forbids any frame mutation — handles aren't rendered in the
+    // template anyway, but defense-in-depth keeps the contract honest if a
+    // future caller invokes this programmatically.
+    if (!drawMode.value) {
+      return;
+    }
     e.stopPropagation();
     store.selectedSquareId = sq.id;
     store.selectedAssetId = null;
@@ -184,7 +190,11 @@ export function useFrameInteractions(
       clipboard.value = null;
       return;
     }
-    drawMode.value = false;
+    // Don't touch `drawMode` here — `placing.value` is checked FIRST in both
+    // pointer-down paths (`onFrameMouseDown` / `onMouseDown`), so the click-
+    // to-drop branch wins regardless of mode. Forcing drawMode→false leaked
+    // out as a mode flip after every paste (user typed `Ctrl+V`, dropped a
+    // frame, then found themselves in Hand mode without asking).
     placing.value = true;
     placeCursor.value = null;
   }
